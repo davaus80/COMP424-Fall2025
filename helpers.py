@@ -216,6 +216,10 @@ def check_endgame(chess_board):
         p0_score = chess_board.shape[0] * chess_board.shape[1]
         is_endgame = True
 
+    if not is_endgame and all(not get_valid_moves(chess_board, player) for player in (1, 2)):
+        # Neither side can move, so treat it as a terminal stalemate position
+        is_endgame = True
+
     return is_endgame, p0_score, p1_score
 
 def get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
