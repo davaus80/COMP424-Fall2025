@@ -94,6 +94,10 @@ class World:
         self.chess_board = np.loadtxt(self.board_fpath, dtype=int, delimiter=',')
         self.board_size = self.chess_board.shape[0] # We assume it is always square
 
+        # save all possible game states
+        self.game_states = {}
+        _ = self.save_game_states()
+
         # Whose turn to step
         self.turn = 0
 
@@ -142,6 +146,16 @@ class World:
             self.p0_time.append(time_taken)
         else:
             self.p1_time.append(time_taken)
+
+    def save_game_states(self):
+        """
+        Updates the count for a game state.
+        If the game state has not existed yet, then it adds in a new key for it,
+        updating the count to 1, otherwise it adds to it 3.
+        """
+        hash_key = tuple(map(tuple, self.chess_board)) 
+        self.game_states[hash_key] = self.game_states.get(hash_key, 0) + 1
+        return self.game_states[hash_key]
 
     def step(self): 
         """
@@ -200,7 +214,11 @@ class World:
         # Change turn
         self.turn = 1 - self.turn
 
-        results = check_endgame(self.chess_board)
+        is_endgame, p0_score, p1_score = check_endgame(self.chess_board)
+        game_repeated = self.save_game_states() >= 3
+        is_endgame = is_endgame or game_repeated
+        results = (is_endgame, p0_score, p1_score)
+
         self.results_cache = results
 
         # Render board and show results
