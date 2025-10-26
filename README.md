@@ -54,7 +54,7 @@ There is some randomness affecting the outcome of the game from the initial layo
 python simulator.py --player_1 random_agent --player_2 random_agent --autoplay
 ```
 
-During autoplay, boards are drawn randomly from `--board_roster_dir` for each iteration. You may test and develop on various setups by providing this board directory path to the command line. However, the defaults will be used during testnig and can be found in the `boards/` folder. Please ensure the timing limits are satisfied for every board in this size range. 
+During autoplay, boards are drawn randomly from `--board_roster_dir` for each iteration. You may test and develop on various setups by providing this board directory path to the command line. However, the defaults will be used during testing and can be found in the `boards/` folder. Please ensure the timing limits are satisfied for every board in this size range. 
 
 **Notes**
 
