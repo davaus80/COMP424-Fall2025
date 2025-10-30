@@ -17,7 +17,10 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
+    
+    self.random_pool = np.random.randint(0, 48, size=10_000)
 
+    
   def step(self, chess_board, player, opponent):
     """
     Implement the step function of your agent here.
@@ -46,4 +49,67 @@ class StudentAgent(Agent):
     # Dummy return (you should replace this with your actual logic)
     # Returning a random valid move as an example
     return random_move(chess_board,player)
+
+class MCTSNode:
+  def __init__(self, state, player=0, parent=None, action=None):
+    self.state = state
+    self.parent = parent
+    self.action = action
+    self.children = []
+
+    self.player = player
+
+    self.visits = 0
+    self.wins  = 0
+
+    #ratio of friendly vs hostile tiles may prove usefull
+    self.ratio = 0.5
+    self.untried_action = get_valid_moves(self.state, player)
+
+    def is_terminal(self):
+      is_endgame = False
+
+      if np.sum(self.state == 0) == 0:
+          is_endgame = True
+      
+      return is_endgame
+    
+    def is_fully_expanded(self):
+      return len(self.untried_action) == 0  
+
+
+    def expand(self):
+      #consider switching to the queue library to make this efficient
+      action = self.untried_actions.pop()
+      new_state = execute_move(self.state, action, self.player)
+      
+      #flip player
+      new_player = self.player ^ 1
+
+      child = MCTSNode(new_state, player= new_player, parent=self, action=action)
+      return child
+
+    def best_child(self):
+      pass
+        
+
+    def UCB1(self, c=1.4):
+      pass
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
 
