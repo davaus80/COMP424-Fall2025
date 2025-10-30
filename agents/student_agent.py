@@ -4,7 +4,7 @@ from store import register_agent
 import sys
 import numpy as np
 from copy import deepcopy
-from helpers import random_move, execute_move, check_endgame, get_valid_moves
+from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions
 
 # Lightweight timing profiler for method-level benchmarking
 import time
@@ -42,6 +42,58 @@ class SimpleProfiler:
 
 PROFILER = SimpleProfiler()
 
+def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
+    """
+    Vectorized get_valid_moves using numpy broadcasting.
+    Returns a list[MoveCoordinates].
+    """
+    board_h, board_w = chess_board.shape
+    # locate source pieces
+    src_rows, src_cols = np.nonzero(chess_board == player)
+
+    if src_rows.size == 0:
+        return []
+
+    # all offsets to consider
+    offsets = np.array(get_directions() + get_two_tile_directions(), dtype=int)  # (M,2)
+    M = offsets.shape[0]
+
+    # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
+    src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
+    dests = src + offsets[None, :, :]                         # (N,M,2)
+
+    # flatten dest coordinates and corresponding src repeats
+    dest_rows = dests[..., 0].ravel()
+    dest_cols = dests[..., 1].ravel()
+    src_rows_rep = np.repeat(src_rows, M)
+    src_cols_rep = np.repeat(src_cols, M)
+
+    # mask: dests inside board
+    in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
+    if not np.any(in_bounds):
+        return []
+
+    dest_rows_ib = dest_rows[in_bounds].astype(int)
+    dest_cols_ib = dest_cols[in_bounds].astype(int)
+    src_rows_ib = src_rows_rep[in_bounds].astype(int)
+    src_cols_ib = src_cols_rep[in_bounds].astype(int)
+
+    # mask: dest empty
+    empty_mask = (chess_board[dest_rows_ib, dest_cols_ib] == 0)
+    if not np.any(empty_mask):
+        return []
+
+    final_src_rows = src_rows_ib[empty_mask]
+    final_src_cols = src_cols_ib[empty_mask]
+    final_dest_rows = dest_rows_ib[empty_mask]
+    final_dest_cols = dest_cols_ib[empty_mask]
+
+    # build MoveCoordinates list
+    moves = [MoveCoordinates((int(sr), int(sc)), (int(dr), int(dc)))
+             for sr, sc, dr, dc in zip(final_src_rows, final_src_cols, final_dest_rows, final_dest_cols)]
+
+    return moves
+
 @register_agent("student_agent")
 class StudentAgent(Agent):
   """
@@ -56,7 +108,7 @@ class StudentAgent(Agent):
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
   @PROFILER.profile("StudentAgent.mcts_search")
-  def mcts_search(self, root_state, player, iter=50):
+  def mcts_search(self, root_state, player, iter=100):
     root = MCTSNode(root_state, player, minmax=0)
 
     for _ in range(iter):
@@ -69,7 +121,7 @@ class StudentAgent(Agent):
       if not node.is_terminal():
         node = node.expand()
 
-          # Simulation
+      # Simulation
       result = node.rollout()
 
       # Backpropagation
@@ -130,29 +182,40 @@ class StudentAgent(Agent):
     return next_move
 
 class MCTSNode:
-  def __init__(self, state, player=1, minmax=0, parent=None, action=None, rng=np.random.default_rng()):
+  def __init__(self, state, player:int, agent_player_id: int | None = None, minmax=0, parent=None, action=None, rng=np.random.default_rng()):
+    """
+    state         : board state for this node
+    player        : player to move at this node (1 or 2)
+    agent_player_id: which player id is "our" agent (used to evaluate rollouts)
+    """
     self.state = deepcopy(state)
+
+    # agent player id (who we consider the "maximizing" agent)
+    self.agent_player_id = player if agent_player_id is None else agent_player_id
+
     self.parent = parent
     self.action = action
     self.children = []
 
+    # player to move at this node
     self.player = player
-    self.minmax = minmax #0 for max 1 for min players
+
+    # minmax flag: 0 means node is for agent (max), 1 means opponent (min)
+    self.minmax = 0 if self.player == self.agent_player_id else 1
 
     self.visits = 0
-    self.wins  = 0
+    self.wins  = 0.0
 
     self.rng = rng
 
-    #ratio of friendly vs hostile tiles may prove usefull
-    self.ratio = 0.5
-    self.untried_action = get_valid_moves(state, player)
+    # Initialize list of legal moves for this node's player
+    self.untried_action = _get_valid_moves(self.state, self.player)
 
   @PROFILER.profile("MCTSNode.is_terminal")
   def is_terminal(self) -> bool:
     if np.sum(self.state == 0) == 0:
         return True
-    if len(get_valid_moves(self.state, self.player)) == 0:
+    if len(_get_valid_moves(self.state, self.player)) == 0:
       return True
     return False
   
@@ -174,7 +237,7 @@ class MCTSNode:
     new_player = 3 - self.player 
     minmax = 1 - self.minmax
 
-    child = MCTSNode(new_state, player=new_player, minmax=minmax, parent=self, action=action, rng=self.rng) 
+    child = MCTSNode(new_state, new_player, self.agent_player_id,  minmax=minmax, parent=self, action=action, rng=self.rng) 
     self.children.append(child)
     return child
 
@@ -183,36 +246,48 @@ class MCTSNode:
     """
     Return best child using upper confidence tree comparison.  
     """
-    if self.minmax == 0: #max player
-      return max(self.children, key=lambda child: self.UCB1(child, c))
-    else:
-      return min(self.children, key=lambda child: self.UCB1(child, -c))
+    return max(self.children, key=lambda child: self.UCB1(child, c))
+
+    # if self.minmax == 0: #max player
+    #   return max(self.children, key=lambda child: self.UCB1(child, c))
+    # else:
+    #   return min(self.children, key=lambda child: self.UCB1(child, -c))
 
   @PROFILER.profile("MCTSNode.UCB1")
   def UCB1(self, child, c) -> float:
-    return (child.wins/child.visits) + c * np.sqrt(np.log(self.visits)/child.visits)
+    # handle unvisited children to avoid division by zero
+    if child.visits == 0:
+      return float("inf")
+    return (child.wins / child.visits) + c * np.sqrt(np.log(max(1, self.visits)) / child.visits)
   
   @PROFILER.profile("MCTSNode.rollout")
-  def rollout(self) -> int:
+  def rollout(self) -> float:
     """
     Simulate game until completion 
     """
     curr_state = deepcopy(self.state)
     curr_player = self.player
-    
+
     while True:
-      allowed_moves = get_valid_moves(curr_state, curr_player)
+      allowed_moves = _get_valid_moves(curr_state, curr_player)
       number_allowed_moves = len(allowed_moves)
-      if number_allowed_moves ==0:return 0
-      # move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
-      move = allowed_moves[0]
+      if number_allowed_moves == 0:
+        # no moves -> treat as draw/neutral
+        return 0.0
+      move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
 
       execute_move(curr_state, move, curr_player)
-      is_endgame, p0, p1 = check_endgame(curr_state)
+      is_endgame, p1, p2 = check_endgame(curr_state)
       if is_endgame:
-        if p0 > p1: return 1
-        if p0 < p1: return -1
-        else: return 0
+        if p1 > p2:
+          winner = 1
+        elif p2 > p1:
+          winner = 2
+        else:
+          return 0.5
+        # return +1 for agent win, -1 for agent loss
+        return 1.0 if winner == self.agent_player_id else -1.0
+
       curr_player = 3 - curr_player
 
   @PROFILER.profile("MCTSNode.backpropagate")
@@ -222,7 +297,7 @@ class MCTSNode:
     """
     self.visits += 1
     self.wins += result
-    
+
     if self.parent:
       self.parent.backpropagate(result)
 
