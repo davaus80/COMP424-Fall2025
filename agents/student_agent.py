@@ -4,11 +4,43 @@ from store import register_agent
 import sys
 import numpy as np
 from copy import deepcopy
-import time
 from helpers import random_move, execute_move, check_endgame, get_valid_moves
 
-# random_pool = np.random.randint(0, 48, size=10_000)
+# Lightweight timing profiler for method-level benchmarking
+import time
+import functools
 
+class SimpleProfiler:
+  def __init__(self):
+    self.data = {}  # label -> {'time': float, 'count': int}
+
+  def _record(self, label, elapsed):
+    d = self.data.setdefault(label, {'time': 0.0, 'count': 0})
+    d['time'] += elapsed
+    d['count'] += 1
+
+  def profile(self, label):
+    def decorator(fn):
+      @functools.wraps(fn)
+      def wrapper(*args, **kwargs):
+        t0 = time.perf_counter()
+        try:
+          return fn(*args, **kwargs)
+        finally:
+          t1 = time.perf_counter()
+          self._record(label, t1 - t0)
+      return wrapper
+    return decorator
+
+  def report(self, top=10):
+    items = sorted(self.data.items(), key=lambda kv: kv[1]['time'], reverse=True)[:top]
+    out = ["Profiler report (label, total_time_s, calls, avg_s):"]
+    for label, v in items:
+      avg = v['time'] / v['count'] if v['count'] else 0.0
+      out.append(f"{label:30} {v['time']:.6f}s  {v['count']:6d}  avg={avg:.6f}s")
+    return "\n".join(out)
+
+PROFILER = SimpleProfiler()
 
 @register_agent("student_agent")
 class StudentAgent(Agent):
@@ -23,7 +55,8 @@ class StudentAgent(Agent):
     
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
-  def mcts_search(self, root_state, player, iter=500):
+  @PROFILER.profile("StudentAgent.mcts_search")
+  def mcts_search(self, root_state, player, iter=50):
     root = MCTSNode(root_state, player, minmax=0)
 
     for _ in range(iter):
@@ -88,6 +121,9 @@ class StudentAgent(Agent):
 
     print("My AI's turn took ", time_taken, "seconds.")
 
+    # Print profiler summary for this step
+    print(PROFILER.report(top=10))
+
     # Dummy return (you should replace this with your actual logic)
     # Returning a random valid move as an example
     # return random_move(chess_board,player)
@@ -112,21 +148,19 @@ class MCTSNode:
     self.ratio = 0.5
     self.untried_action = get_valid_moves(state, player)
 
+  @PROFILER.profile("MCTSNode.is_terminal")
   def is_terminal(self) -> bool:
-
     if np.sum(self.state == 0) == 0:
         return True
-
-    
     if len(get_valid_moves(self.state, self.player)) == 0:
       return True
-    
     return False
   
+  @PROFILER.profile("MCTSNode.is_fully_expanded")
   def is_fully_expanded(self):
     return len(self.untried_action) == 0  
 
-
+  @PROFILER.profile("MCTSNode.expand")
   def expand(self):
     """
     Expand new child node
@@ -144,6 +178,7 @@ class MCTSNode:
     self.children.append(child)
     return child
 
+  @PROFILER.profile("MCTSNode.best_child")
   def best_child(self, c=1.4):
     """
     Return best child using upper confidence tree comparison.  
@@ -153,24 +188,24 @@ class MCTSNode:
     else:
       return min(self.children, key=lambda child: self.UCB1(child, -c))
 
-        
+  @PROFILER.profile("MCTSNode.UCB1")
   def UCB1(self, child, c) -> float:
     return (child.wins/child.visits) + c * np.sqrt(np.log(self.visits)/child.visits)
   
+  @PROFILER.profile("MCTSNode.rollout")
   def rollout(self) -> int:
     """
     Simulate game until completion 
     """
     curr_state = deepcopy(self.state)
     curr_player = self.player
+    
     while True:
       allowed_moves = get_valid_moves(curr_state, curr_player)
       number_allowed_moves = len(allowed_moves)
-      
-      #probably change this later
       if number_allowed_moves ==0:return 0
-      #grab a random move
-      move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
+      # move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
+      move = allowed_moves[0]
 
       execute_move(curr_state, move, curr_player)
       is_endgame, p0, p1 = check_endgame(curr_state)
@@ -180,8 +215,7 @@ class MCTSNode:
         else: return 0
       curr_player = 3 - curr_player
 
-
-  #nothing to optimize here
+  @PROFILER.profile("MCTSNode.backpropagate")
   def backpropagate(self, result) -> None:
     """
     Update tree
@@ -203,7 +237,7 @@ class MCTSNode:
 
 
 
-  
+
 
 
 
