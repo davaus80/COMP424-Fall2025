@@ -80,7 +80,7 @@ class StudentAgent(Agent):
 
     # next_move = self.mcts_search(chess_board, player)
 
-    next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
+    # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
     # next_move = self.mod_mcts(chess_board, player)
     next_move = self.mcts_search(chess_board, player)
 
@@ -112,7 +112,7 @@ class MCTSNode:
     self.ratio = 0.5
     self.untried_action = get_valid_moves(state, player)
 
-  def is_terminal(self):
+  def is_terminal(self) -> bool:
 
     if np.sum(self.state == 0) == 0:
         return True
@@ -154,10 +154,10 @@ class MCTSNode:
       return min(self.children, key=lambda child: self.UCB1(child, -c))
 
         
-  def UCB1(self, child, c):
+  def UCB1(self, child, c) -> float:
     return (child.wins/child.visits) + c * np.sqrt(np.log(self.visits)/child.visits)
   
-  def rollout(self):
+  def rollout(self) -> int:
     """
     Simulate game until completion 
     """
@@ -180,7 +180,9 @@ class MCTSNode:
         else: return 0
       curr_player = 3 - curr_player
 
-  def backpropagate(self, result):
+
+  #nothing to optimize here
+  def backpropagate(self, result) -> None:
     """
     Update tree
     """
