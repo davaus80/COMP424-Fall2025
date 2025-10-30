@@ -30,6 +30,7 @@ class StudentAgent(Agent):
       node = root
 
       while not node.is_terminal() and node.is_fully_expanded():
+            # print("First best child")
             node = node.best_child()
 
       if not node.is_terminal():
@@ -41,8 +42,19 @@ class StudentAgent(Agent):
       # Backpropagation
       node.backpropagate(result)
 
+    # print("Second child")
     return root.best_child(c=0).action
-      
+  
+  def mod_mcts(self, root_state, player):
+
+    root = MCTSNode(root_state, player)
+    action = root.untried_action.pop()
+
+    new_state = deepcopy(root.state)
+    execute_move(new_state, action, root.player)
+
+    print(new_state)
+
     
   def step(self, chess_board, player, opponent):
     """
@@ -65,17 +77,25 @@ class StudentAgent(Agent):
     # time_taken during your search and breaking with the best answer
     # so far when it nears 2 seconds.
     start_time = time.time()
+
+    # next_move = self.mcts_search(chess_board, player)
+
+    next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
+    # next_move = self.mod_mcts(chess_board, player)
+    next_move = self.mcts_search(chess_board, player)
+
     time_taken = time.time() - start_time
 
     print("My AI's turn took ", time_taken, "seconds.")
 
     # Dummy return (you should replace this with your actual logic)
     # Returning a random valid move as an example
-    return random_move(chess_board,player)
+    # return random_move(chess_board,player)
+    return next_move
 
 class MCTSNode:
   def __init__(self, state, player=1, minmax=0, parent=None, action=None, rng=np.random.default_rng()):
-    self.state = state
+    self.state = deepcopy(state)
     self.parent = parent
     self.action = action
     self.children = []
@@ -90,14 +110,18 @@ class MCTSNode:
 
     #ratio of friendly vs hostile tiles may prove usefull
     self.ratio = 0.5
-    self.untried_action = get_valid_moves(self.state, player)
+    self.untried_action = get_valid_moves(state, player)
 
   def is_terminal(self):
-    is_endgame = False
+
     if np.sum(self.state == 0) == 0:
-        is_endgame = True
+        return True
+
     
-    return is_endgame
+    if len(get_valid_moves(self.state, self.player)) == 0:
+      return True
+    
+    return False
   
   def is_fully_expanded(self):
     return len(self.untried_action) == 0  
@@ -109,12 +133,15 @@ class MCTSNode:
     """
     #consider switching to the queue library to make this efficient
     action = self.untried_action.pop()
-    new_state = execute_move(self.state, action, self.player)
-    
+    new_state = deepcopy(self.state)
+
+    execute_move(new_state, action, self.player)
     #flip player
     new_player = 3 - self.player 
     minmax = 1 - self.minmax
+
     child = MCTSNode(new_state, player=new_player, minmax=minmax, parent=self, action=action, rng=self.rng) 
+    self.children.append(child)
     return child
 
   def best_child(self, c=1.4):
@@ -134,16 +161,18 @@ class MCTSNode:
     """
     Simulate game until completion 
     """
-    curr_state = np.copy(self.state)
+    curr_state = deepcopy(self.state)
     curr_player = self.player
     while True:
       allowed_moves = get_valid_moves(curr_state, curr_player)
       number_allowed_moves = len(allowed_moves)
-
+      
+      #probably change this later
+      if number_allowed_moves ==0:return 0
       #grab a random move
       move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
 
-      curr_state = execute_move(curr_state, move, curr_player)
+      execute_move(curr_state, move, curr_player)
       is_endgame, p0, p1 = check_endgame(curr_state)
       if is_endgame:
         if p0 > p1: return 1
