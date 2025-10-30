@@ -127,18 +127,9 @@ class StudentAgent(Agent):
       # Backpropagation
       node.backpropagate(result)
 
-    # print("Second child")
+  
     return root.best_child(c=0).action
   
-  def mod_mcts(self, root_state, player):
-
-    root = MCTSNode(root_state, player)
-    action = root.untried_action.pop()
-
-    new_state = deepcopy(root.state)
-    execute_move(new_state, action, root.player)
-
-    print(new_state)
 
     
   def step(self, chess_board, player, opponent):
@@ -163,10 +154,7 @@ class StudentAgent(Agent):
     # so far when it nears 2 seconds.
     start_time = time.time()
 
-    # next_move = self.mcts_search(chess_board, player)
-
     # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
-    # next_move = self.mod_mcts(chess_board, player)
     next_move = self.mcts_search(chess_board, player)
 
     time_taken = time.time() - start_time
@@ -208,6 +196,8 @@ class MCTSNode:
 
     self.rng = rng
 
+    self.ratio = self.board_ratio()
+
     # Initialize list of legal moves for this node's player
     self.untried_action = _get_valid_moves(self.state, self.player)
 
@@ -246,19 +236,33 @@ class MCTSNode:
     """
     Return best child using upper confidence tree comparison.  
     """
-    return max(self.children, key=lambda child: self.UCB1(child, c))
+    # return max(self.children, key=lambda child: self.UCB1(child, c))
 
-    # if self.minmax == 0: #max player
-    #   return max(self.children, key=lambda child: self.UCB1(child, c))
-    # else:
-    #   return min(self.children, key=lambda child: self.UCB1(child, -c))
+    if self.minmax == 0: #max player
+      return max(self.children, key=lambda child: self.UCB1(child, c))
+    else:
+      return max(self.children, key=lambda child: self.UCB1(child, -c))
 
   @PROFILER.profile("MCTSNode.UCB1")
   def UCB1(self, child, c) -> float:
     # handle unvisited children to avoid division by zero
     if child.visits == 0:
       return float("inf")
-    return (child.wins / child.visits) + c * np.sqrt(np.log(max(1, self.visits)) / child.visits)
+    return child.ratio*0.5 + (child.wins / child.visits) + c * np.sqrt(np.log(max(1, self.visits)) / child.visits)
+  
+  def board_ratio(self) -> float:
+
+    friendly_col, _ = np.nonzero(self.state == self.agent_player_id)
+    enemy_col, _ = np.nonzero(self.state == (3 - self.agent_player_id))
+
+    friendly_tiles = friendly_col.size
+    enemy_tiles = enemy_col.size
+    
+    if enemy_tiles == 0:
+      return float("inf")
+
+    return friendly_tiles/enemy_tiles
+
   
   @PROFILER.profile("MCTSNode.rollout")
   def rollout(self) -> float:
