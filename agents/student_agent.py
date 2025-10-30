@@ -94,6 +94,21 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
 
     return moves
 
+def print_tree(node, prefix: str = "", is_tail: bool = True):
+  """Print tree sideways with branches going upward."""
+  if node.parent:
+    UCT = (node.wins / float(node.visits)) + 1.4 * np.sqrt(np.log(max(1, node.parent.visits)) / node.visits)
+  else:
+    UCT = 0.0
+
+  if node.children:
+    for i, child in enumerate(node.children[:-1]):
+      print_tree(child, prefix + ("│   " if not is_tail else "    "), False)
+    print_tree(node.children[-1], prefix + ("│   " if not is_tail else "    "), True)
+  print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
+  
+
+
 @register_agent("student_agent")
 class StudentAgent(Agent):
   """
