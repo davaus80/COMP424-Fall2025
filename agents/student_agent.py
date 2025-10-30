@@ -4,7 +4,7 @@ from store import register_agent
 import sys
 import numpy as np
 from copy import deepcopy
-from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions
+from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
 
 # Lightweight timing profiler for method-level benchmarking
 import time
@@ -94,10 +94,12 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
 
     return moves
 
+
+
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
   if node.parent:
-    UCT = (node.wins / float(node.visits)) + 1.4 * np.sqrt(np.log(max(1, node.parent.visits)) / node.visits)
+    UCT = node.parent.UCB1(node, 1.4)
   else:
     UCT = 0.0
 
@@ -105,7 +107,8 @@ def print_tree(node, prefix: str = "", is_tail: bool = True):
     for i, child in enumerate(node.children[:-1]):
       print_tree(child, prefix + ("│   " if not is_tail else "    "), False)
     print_tree(node.children[-1], prefix + ("│   " if not is_tail else "    "), True)
-  print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
+  # print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
+  print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} ")
   
 
 
@@ -124,10 +127,12 @@ class StudentAgent(Agent):
 
   @PROFILER.profile("StudentAgent.mcts_search")
   def mcts_search(self, root_state, player, iter=100):
-    root = MCTSNode(root_state, player, minmax=0)
+    root = MCTSNode(root_state, player, agent_player_id=player)
 
     for _ in range(iter):
       node = root
+      print_tree(node)
+      print("-"*60)
 
       while not node.is_terminal() and node.is_fully_expanded():
             # print("First best child")
@@ -141,6 +146,8 @@ class StudentAgent(Agent):
 
       # Backpropagation
       node.backpropagate(result)
+
+      
 
   
     return root.best_child(c=0).action
@@ -185,7 +192,7 @@ class StudentAgent(Agent):
     return next_move
 
 class MCTSNode:
-  def __init__(self, state, player:int, agent_player_id: int | None = None, minmax=0, parent=None, action=None, rng=np.random.default_rng()):
+  def __init__(self, state, player:int, agent_player_id: int | None = None, parent=None, action=None, rng=np.random.default_rng()):
     """
     state         : board state for this node
     player        : player to move at this node (1 or 2)
@@ -206,12 +213,13 @@ class MCTSNode:
     # minmax flag: 0 means node is for agent (max), 1 means opponent (min)
     self.minmax = 0 if self.player == self.agent_player_id else 1
 
-    self.visits = 0
+    self.visits = 0.0
     self.wins  = 0.0
 
     self.rng = rng
 
     self.ratio = self.board_ratio()
+    self.coin_delta = self.disk_delta()
 
     # Initialize list of legal moves for this node's player
     self.untried_action = _get_valid_moves(self.state, self.player)
@@ -240,9 +248,9 @@ class MCTSNode:
     execute_move(new_state, action, self.player)
     #flip player
     new_player = 3 - self.player 
-    minmax = 1 - self.minmax
+ 
 
-    child = MCTSNode(new_state, new_player, self.agent_player_id,  minmax=minmax, parent=self, action=action, rng=self.rng) 
+    child = MCTSNode(new_state, new_player, self.agent_player_id, parent=self, action=action, rng=self.rng) 
     self.children.append(child)
     return child
 
@@ -251,20 +259,27 @@ class MCTSNode:
     """
     Return best child using upper confidence tree comparison.  
     """
-    # return max(self.children, key=lambda child: self.UCB1(child, c))
 
     if self.minmax == 0: #max player
       return max(self.children, key=lambda child: self.UCB1(child, c))
     else:
       return max(self.children, key=lambda child: self.UCB1(child, -c))
 
+
   @PROFILER.profile("MCTSNode.UCB1")
   def UCB1(self, child, c) -> float:
     # handle unvisited children to avoid division by zero
+    #parameters
+    b = 0.001 #balance
+    g = 1 #greed
+    c = 0.4 #exploration
+
     if child.visits == 0:
       return float("inf")
-    return child.ratio*0.5 + (child.wins / child.visits) + c * np.sqrt(np.log(max(1, self.visits)) / child.visits)
+    return child.ratio*b  + np.sqrt(float(child.coin_delta))*g + (float(child.wins) / float(child.visits)) +\
+        c * np.sqrt( np.log(max(1.0, float(self.visits))) / float(child.visits))
   
+  @PROFILER.profile("MCTSNode.ratio")
   def board_ratio(self) -> float:
 
     friendly_col, _ = np.nonzero(self.state == self.agent_player_id)
@@ -277,6 +292,25 @@ class MCTSNode:
       return float("inf")
 
     return friendly_tiles/enemy_tiles
+  
+  @PROFILER.profile("MCTSNode.delta")
+  def disk_delta(self) -> int:
+    """
+    Calculate the change in disks after the move
+    """
+
+    if self.parent:
+      parent_col, _  = np.nonzero(self.parent.state == self.agent_player_id)
+      current_col, _ = np.nonzero(self.state == self.agent_player_id)
+    
+      parent_tiles = parent_col.size
+      current_tiles = current_col.size
+
+      return current_tiles - parent_tiles
+    else:
+      return 0
+
+    
 
   
   @PROFILER.profile("MCTSNode.rollout")
@@ -287,12 +321,20 @@ class MCTSNode:
     curr_state = deepcopy(self.state)
     curr_player = self.player
 
+    stuck_flag = False
+
     while True:
       allowed_moves = _get_valid_moves(curr_state, curr_player)
       number_allowed_moves = len(allowed_moves)
+
       if number_allowed_moves == 0:
-        # no moves -> treat as draw/neutral
-        return 0.0
+        if stuck_flag:
+          return 0.5
+        
+        curr_player = 3 - curr_player
+        stuck_flag =True  
+        continue
+
       move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
 
       execute_move(curr_state, move, curr_player)
@@ -305,7 +347,7 @@ class MCTSNode:
         else:
           return 0.5
         # return +1 for agent win, -1 for agent loss
-        return 1.0 if winner == self.agent_player_id else -1.0
+        return 1.0 if winner == self.agent_player_id else 0
 
       curr_player = 3 - curr_player
 
