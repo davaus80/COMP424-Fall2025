@@ -149,7 +149,7 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
-    self.MAX_DEPTH = 3
+    self.MAX_DEPTH = 4
 
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
@@ -183,7 +183,7 @@ class StudentAgent(Agent):
     l = list(zip(succ, valid_moves))
     l.sort(
       reverse=True,
-      key=lambda x: self._minimax(x[0], 1)
+      key=lambda x: self._minimax(x[0], 2)
     )
     return l[0][1]
 
