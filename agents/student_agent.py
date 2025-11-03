@@ -350,6 +350,50 @@ class MCTSNode:
         return 1.0 if winner == self.agent_player_id else 0
 
       curr_player = 3 - curr_player
+      stuck_flag = False
+
+  @PROFILER.profile("MCTSNode.lim_rollout")
+  def limited_rollout(self) -> float:
+    depth_limit = 20
+
+    curr_state = deepcopy(self.state)
+    curr_player = self.player
+
+    stuck_flag = False
+    n = 0
+
+    while n < depth_limit:
+      allowed_moves = _get_valid_moves(curr_state, curr_player)
+      number_allowed_moves = len(allowed_moves)
+
+      if number_allowed_moves == 0:
+        if stuck_flag:
+          break
+        
+        curr_player = 3 - curr_player
+        stuck_flag = True  
+        continue
+
+      move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
+      execute_move(curr_state, move, curr_player)
+
+      curr_player = 3 - curr_player
+      stuck_flag = False
+      n += 1
+
+    our_score = np.count_nonzero(curr_state == self.agent_player_id)
+    opponent_score = np.count_nonzero(curr_state == (3-self.agent_player_id))
+
+
+    if our_score > opponent_score:
+      return 1.0
+    elif our_score < opponent_score:
+      return 0.0
+    else:
+      return 0.5
+
+
+
 
   @PROFILER.profile("MCTSNode.backpropagate")
   def backpropagate(self, result) -> None:
