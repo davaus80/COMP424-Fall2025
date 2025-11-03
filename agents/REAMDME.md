@@ -9,3 +9,17 @@
 - Knowledge base
 - Search optimization
 - Inference and domain reduction
+
+
+Testing our agent:
+```bash
+
+# Simple game
+python simulator.py --player_1 random_agent --player_2 steve_agent --display 
+
+# Multiple
+python simulator.py --player_1 steve_agent --player_2 random_agent --autoplay --autoplay_runs 100
+
+# Board selection
+python simulator.py --player_1 steve_agent --player_2 greedy_corners_agent --autoplay --autoplay_runs 200 --board_path boards/empty_7x7.csv
+```
