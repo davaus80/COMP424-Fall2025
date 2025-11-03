@@ -198,7 +198,7 @@ class MCTSNode:
     player        : player to move at this node (1 or 2)
     agent_player_id: which player id is "our" agent (used to evaluate rollouts)
     """
-    self.state = deepcopy(state)
+    self.state = state
 
     # agent player id (who we consider the "maximizing" agent)
     self.agent_player_id = player if agent_player_id is None else agent_player_id
@@ -218,19 +218,18 @@ class MCTSNode:
 
     self.rng = rng
 
+    #used to bias search 
     self.ratio = self.board_ratio()
     self.coin_delta = self.disk_delta()
 
     # Initialize list of legal moves for this node's player
     self.untried_action = _get_valid_moves(self.state, self.player)
+    self.number_legal_moves = len(self.untried_action)
 
   @PROFILER.profile("MCTSNode.is_terminal")
   def is_terminal(self) -> bool:
-    if np.sum(self.state == 0) == 0:
-        return True
-    if len(_get_valid_moves(self.state, self.player)) == 0:
-      return True
-    return False
+    return self.number_legal_moves == 0
+  
   
   @PROFILER.profile("MCTSNode.is_fully_expanded")
   def is_fully_expanded(self):
@@ -241,13 +240,12 @@ class MCTSNode:
     """
     Expand new child node
     """
-    #consider switching to the queue library to make this efficient
-    action = self.untried_action.pop()
+
+    action = self.untried_action.pop(self.rng.integers(0,len(self.untried_action)))
     new_state = deepcopy(self.state)
 
     execute_move(new_state, action, self.player)
-    #flip player
-    new_player = 3 - self.player 
+    new_player = 3 - self.player #flips the player
  
 
     child = MCTSNode(new_state, new_player, self.agent_player_id, parent=self, action=action, rng=self.rng) 
@@ -259,11 +257,8 @@ class MCTSNode:
     """
     Return best child using upper confidence tree comparison.  
     """
+    return max(self.children, key=lambda child: self.UCB1(child, c))
 
-    if self.minmax == 0: #max player
-      return max(self.children, key=lambda child: self.UCB1(child, c))
-    else:
-      return max(self.children, key=lambda child: self.UCB1(child, -c))
 
 
   @PROFILER.profile("MCTSNode.UCB1")
@@ -271,8 +266,8 @@ class MCTSNode:
     # handle unvisited children to avoid division by zero
     #parameters
     b = 0.001 #balance
-    g = 1 #greed
-    c = 0.4 #exploration
+    g = 1     #greed
+    # c = 1.4   #exploration
 
     if child.visits == 0:
       return float("inf")
@@ -300,13 +295,10 @@ class MCTSNode:
     """
 
     if self.parent:
-      parent_col, _  = np.nonzero(self.parent.state == self.agent_player_id)
-      current_col, _ = np.nonzero(self.state == self.agent_player_id)
-    
-      parent_tiles = parent_col.size
-      current_tiles = current_col.size
-
-      return current_tiles - parent_tiles
+      our_score = np.count_nonzero(self.state == self.agent_player_id)
+      parent_score = np.count_nonzero(self.parent.state == self.agent_player_id)
+      
+      return our_score - parent_score
     else:
       return 0
 
@@ -347,7 +339,7 @@ class MCTSNode:
         else:
           return 0.5
         # return +1 for agent win, -1 for agent loss
-        return 1.0 if winner == self.agent_player_id else 0
+        return 1.0 if winner == self.agent_player_id else -1.0
 
       curr_player = 3 - curr_player
       stuck_flag = False
