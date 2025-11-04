@@ -168,6 +168,9 @@ class StudentAgent(Agent):
     self.name = "StudentAgent"
     self.max_depth = 3
 
+    self.alpha = -sys.maxsize
+    self.beta = sys.maxsize
+
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
     mask1[0, :] = False
@@ -181,20 +184,34 @@ class StudentAgent(Agent):
     mask2[:, 0] = True
     mask2[:, -1] = True
     self.mask2 = mask2  # edges
+    mask3 = np.zeros((7, 7), dtype=bool)
+    mask3[0][0] = True
+    mask3[0][-1] = True
+    mask3[-1][0] = True
+    mask3[-1][-1] = True
+    self.mask3 = mask3  # corners
 
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
 
+  def reset_a_b(self):
+    self.alpha = -sys.maxsize
+    self.beta = sys.maxsize
+
+
   def utility(self, state: MinimaxNode) -> float:
-    # f1 and f2: nb of max player discs in mask
+    # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
+    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    #
+    # # f4 to f6: nb of min player discs in mask
+    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
 
-    # f3 and f4: nb of min player discs in mask
-    f3 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    f4 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-
-    return f1 + 2*f2 + (-.5)*f3 + (-1)*f4
+    # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
+    return f1 + f2
 
   def _minimax(self, node, depth) -> float:
     valid_moves = _get_valid_moves(node.board, node.player)
@@ -222,6 +239,7 @@ class StudentAgent(Agent):
     elif n == 1:
       return valid_moves[0]
 
+    self.reset_a_b()
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
 
