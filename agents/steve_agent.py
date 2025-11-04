@@ -31,6 +31,9 @@ class SteveAgent(Agent):
         best_move = None
         best_score = float("-inf")
         depth = getattr(self, "search_depth", 2)
+
+        alpha = float("-inf")
+        beta = float("inf")
         
         # Evaluate each legal move
         for move in legal_moves:
@@ -45,8 +48,12 @@ class SteveAgent(Agent):
         
         return best_move or random.choice(legal_moves)
 
-    # Minimax implementation (Need alpha-beta pruning)-- can do Montecarlo TreeSearch
-    def minimax(self, board_state, depth_remaining, current_player, agent_color, opponent_color):
+    # TODO:
+    # 1. Alpha-beta pruning
+    # 2. Monte Carlo Tree Search
+
+    # Minimax implementation (Need alpha-beta pruning)
+    def minimax(self, board_state, depth_remaining, current_player, agent_color, opponent_color, alpha=float("-inf"), beta=float("inf")):
         """
         Simple minimax without alpha-beta pruning.
         """
@@ -62,18 +69,26 @@ class SteveAgent(Agent):
             for move in legal:
                 next_board = copy.deepcopy(board_state)
                 execute_move(next_board, move, current_player)
-                val = self.minimax(next_board, depth_remaining - 1, opponent_color, agent_color, opponent_color)
+                val = self.minimax(next_board, depth_remaining - 1, opponent_color, agent_color, opponent_color, alpha, beta)
+                if val >= beta:
+                    return val  # Beta cut-off -- value not considered by minimizer
                 best_val = max(best_val, val)
+                alpha = max(alpha, best_val)
             return best_val
         else:
             best_val = float("inf")
             for move in legal:
                 next_board = copy.deepcopy(board_state)
                 execute_move(next_board, move, current_player)
-                val = self.minimax(next_board, depth_remaining - 1, agent_color, agent_color, opponent_color)
+                val = self.minimax(next_board, depth_remaining - 1, agent_color, agent_color, opponent_color, alpha, beta)
+                if val <= alpha:
+                    return val  # Alpha cut-off -- value not considered by maximizer
                 best_val = min(best_val, val)
+                beta = min(beta, best_val)
             return best_val
-
+        
+    
+    # Evaluation function -- can be tweaked
     def evaluate_board(self, board, color, opponent):
         """
         Evaluate the board state based on multiple factors.

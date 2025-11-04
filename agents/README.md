@@ -10,10 +10,14 @@
 - Search optimization
 - Inference and domain reduction
 
+## Reminders
+- Do not run test locally
+- No external library
+- Nbr of turns cap
+- 2 sec
 
-Testing our agent:
+## Testing our agent:
 ```bash
-
 # Simple game
 python simulator.py --player_1 random_agent --player_2 steve_agent --display 
 
