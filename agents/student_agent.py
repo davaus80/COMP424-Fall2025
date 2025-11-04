@@ -97,6 +97,7 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
 
     return moves
 
+
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
   if node.parent:
@@ -111,6 +112,22 @@ def print_tree(node, prefix: str = "", is_tail: bool = True):
   # print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
   print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} ")
 
+
+# def _max(lst):
+#   """
+#   A max() that handles empty lists of non-negative numbers.
+#   """
+#   if not lst:
+#     return 0
+#   return max(lst)
+#
+# def _min(lst):
+#   """
+#   A min() that handles empty lists.
+#   """
+#   if not lst:
+#     return sys.maxsize
+#   return min(lst)
 
 class MinimaxNode:
   def __init__(self, chess_board, max_player: int, min_player: int, is_max):
@@ -149,20 +166,43 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
-    self.MAX_DEPTH = 4
+    self.max_depth = 3
+
+    # masks for heuristic calculations
+    mask1 = np.ones((7, 7), dtype=bool)
+    mask1[0, :] = False
+    mask1[-1, :] = False
+    mask1[:, 0] = False
+    mask1[:, -1] = False
+    self.mask1 = mask1  # non-edges
+    mask2 = np.zeros((7, 7), dtype=bool)
+    mask2[0, :] = True
+    mask2[-1, :] = True
+    mask2[:, 0] = True
+    mask2[:, -1] = True
+    self.mask2 = mask2  # edges
 
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
 
   def utility(self, state: MinimaxNode) -> float:
-    f1 = np.sum(state.board == state.max_player)  # literally just the nb of discs of StudentAgent
-    return f1
+    # f1 and f2: nb of max player discs in mask
+    f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
+    f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
+
+    # f3 and f4: nb of min player discs in mask
+    f3 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    f4 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+
+    return f1 + 2*f2 + (-.5)*f3 + (-1)*f4
 
   def _minimax(self, node, depth) -> float:
-    if depth == self.MAX_DEPTH or node.is_terminal():
+    valid_moves = _get_valid_moves(node.board, node.player)
+
+    if depth == self.max_depth or len(valid_moves) == 0 or node.is_terminal():
       return self.utility(node)
 
-    succ = node.get_successors()
+    succ = node.get_successors(valid_moves)
     depth_ = depth + 1
 
     if node.is_max_node():
@@ -174,8 +214,13 @@ class StudentAgent(Agent):
   def ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
     valid_moves = _get_valid_moves(chess_board, player)
 
-    if len(valid_moves) == 0:
+    n = len(valid_moves)
+    print("==========================================")
+    print(f"# of valid moves: {n}")
+    if n == 0:
       return None
+    elif n == 1:
+      return valid_moves[0]
 
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
