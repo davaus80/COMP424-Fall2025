@@ -2,6 +2,7 @@
 from agents.agent import Agent
 from store import register_agent
 import sys
+
 import numpy as np
 from copy import deepcopy
 from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
@@ -39,6 +40,7 @@ class SimpleProfiler:
       avg = v['time'] / v['count'] if v['count'] else 0.0
       out.append(f"{label:30} {v['time']:.6f}s  {v['count']:6d}  avg={avg:.6f}s")
     return "\n".join(out)
+
 
 PROFILER = SimpleProfiler()
 
@@ -95,20 +97,22 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
     return moves
 
 
-
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
   if node.parent:
     UCT = node.parent.UCB1(node, 1.4)
+    dest = node.action.get_dest()
+    source = node.action.get_src()
   else:
     UCT = 0.0
+    dest = []
+    source = []
 
   if node.children:
     for i, child in enumerate(node.children[:-1]):
       print_tree(child, prefix + ("│   " if not is_tail else "    "), False)
     print_tree(node.children[-1], prefix + ("│   " if not is_tail else "    "), True)
-  # print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
-  print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} ")
+  print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} {source}{dest}")
   
 
 
@@ -147,9 +151,8 @@ class StudentAgent(Agent):
 
     for _ in range(iter):
       node = root
-      print_tree(node)
-      print("-"*60)
-
+      
+      
       while not node.is_terminal() and node.is_fully_expanded():
             # print("First best child")
             node = node.best_child()
@@ -158,18 +161,20 @@ class StudentAgent(Agent):
         node = node.expand()
 
       # Simulation
-      result = node.rollout()
+      result = node.limited_rollout()
 
       # Backpropagation
       node.backpropagate(result)
 
-      
+    # print_tree(root)
+    # print("-"*60)
 
-  
-    return root.best_child(c=0).action
-  
+    self.last_known_node = root.best_child(c=0)
 
-    
+    return self.last_known_node.action
+
+
+
   def step(self, chess_board, player, opponent):
     """
     Implement the step function of your agent here.
@@ -192,15 +197,17 @@ class StudentAgent(Agent):
     # so far when it nears 2 seconds.
     start_time = time.time()
 
-    # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
+    #next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
     next_move = self.mcts_search(chess_board, player)
 
+    # root = MCTSNode(chess_board, player, agent_player_id=player)
+    # time.sleep(1)
     time_taken = time.time() - start_time
 
     print("My AI's turn took ", time_taken, "seconds.")
 
     # Print profiler summary for this step
-    print(PROFILER.report(top=10))
+    # print(PROFILER.report(top=10))
 
     # Dummy return (you should replace this with your actual logic)
     # Returning a random valid move as an example
@@ -269,7 +276,7 @@ class MCTSNode:
     return child
 
   @PROFILER.profile("MCTSNode.best_child")
-  def best_child(self, c=1.4):
+  def best_child(self, c=2):
     """
     Return best child using upper confidence tree comparison.  
     """
@@ -287,9 +294,14 @@ class MCTSNode:
 
     if child.visits == 0:
       return float("inf")
-    return child.ratio*b  + np.sqrt(float(child.coin_delta))*g + (float(child.wins) / float(child.visits)) +\
+    
+    # return   (float(child.wins) / float(child.visits)) +\
+    #     c * np.sqrt( np.log(max(1.0, float(self.visits))) / float(child.visits))
+
+    return  float(child.coin_delta)*g + (float(child.wins) / float(child.visits)) +\
         c * np.sqrt( np.log(max(1.0, float(self.visits))) / float(child.visits))
   
+
   @PROFILER.profile("MCTSNode.ratio")
   def board_ratio(self) -> float:
 
@@ -304,6 +316,7 @@ class MCTSNode:
 
     return friendly_tiles/enemy_tiles
   
+
   @PROFILER.profile("MCTSNode.delta")
   def disk_delta(self) -> int:
     """
@@ -318,7 +331,17 @@ class MCTSNode:
     else:
       return 0
 
+
+  def mobility_delta(self) -> int:
+
+    if self.parent:
+      our_score = self.number_legal_moves
+      parent_score = self.parent.number_legal_moves
+        
+      return our_score - parent_score
     
+    else:
+      return 0
 
   
   @PROFILER.profile("MCTSNode.rollout")
@@ -362,7 +385,7 @@ class MCTSNode:
 
   @PROFILER.profile("MCTSNode.lim_rollout")
   def limited_rollout(self) -> float:
-    depth_limit = 20
+    depth_limit = 12
 
     curr_state = deepcopy(self.state)
     curr_player = self.player
@@ -389,18 +412,31 @@ class MCTSNode:
       stuck_flag = False
       n += 1
 
-    our_score = np.count_nonzero(curr_state == self.agent_player_id)
-    opponent_score = np.count_nonzero(curr_state == (3-self.agent_player_id))
+    our = self.agent_player_id
+    opp = 3 - self.agent_player_id
 
+    our_coins = np.count_nonzero(curr_state == our)
+    opp_coins = np.count_nonzero(curr_state == opp)
 
-    if our_score > opponent_score:
+  
+    # corner control bonus
+    # n = curr_state.shape[0]
+    # corners = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1)]
+    # our_corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == our) * 5
+    # opp_corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == opp) * 5
+    # penalize opponent mobility
+    # our_moves = len(get_valid_moves(curr_state, our))
+    # opp_moves = len(get_valid_moves(curr_state, opp))
+
+    our_score = our_coins 
+    opp_score = opp_coins 
+    
+    if our_score > opp_score:
       return 1.0
-    elif our_score < opponent_score:
-      return 0.0
+    elif our_score < opp_score:
+      return -1.0
     else:
       return 0.5
-
-
 
 
   @PROFILER.profile("MCTSNode.backpropagate")
