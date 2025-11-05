@@ -123,11 +123,27 @@ class StudentAgent(Agent):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
     
+    self.last_known_node = None
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
   @PROFILER.profile("StudentAgent.mcts_search")
-  def mcts_search(self, root_state, player, iter=100):
-    root = MCTSNode(root_state, player, agent_player_id=player)
+  def mcts_search(self, root_state, player, iter=600):
+    
+    root = None
+
+    if self.last_known_node:
+
+      #reuse the existing tree for the subsequent iterations
+      #by matching the child of our choise with the actual opponent choice that lead to the new state
+      #Possible weird edge case: having back to back turns
+      for child in self.last_known_node.children:
+        if np.array_equal(child.state, root_state):
+          root = child
+          break
+    
+
+    if root == None:
+      root = MCTSNode(root_state, player, agent_player_id=player)
 
     for _ in range(iter):
       node = root
