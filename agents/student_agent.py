@@ -216,7 +216,8 @@ class StudentAgent(Agent):
   def _minimax(self, node, depth) -> float:
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    if depth == self.max_depth or len(valid_moves) == 0 or node.is_terminal():
+    
+    if depth == self.max_depth or len(valid_moves) == 0:
       return self.utility(node)
 
     succ = node.get_successors(valid_moves)
