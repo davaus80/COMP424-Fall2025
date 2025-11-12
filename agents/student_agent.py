@@ -1,4 +1,6 @@
 # Student agent: Add your own agent here
+# python simulator.py --player_1 greedy_corners_agent --player_2 random_agent --display
+
 from agents.agent import Agent
 from store import register_agent
 import sys
