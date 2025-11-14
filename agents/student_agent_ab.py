@@ -13,7 +13,6 @@ import time
 # Lightweight timing profiler for method-level benchmarking
 from agents.simple_profiler import SimpleProfiler
 
-
 PROFILER = SimpleProfiler()
 
 def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
@@ -83,23 +82,6 @@ def print_tree(node, prefix: str = "", is_tail: bool = True):
   # print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
   print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} ")
 
-
-# def _max(lst):
-#   """
-#   A max() that handles empty lists of non-negative numbers.
-#   """
-#   if not lst:
-#     return 0
-#   return max(lst)
-#
-# def _min(lst):
-#   """
-#   A min() that handles empty lists.
-#   """
-#   if not lst:
-#     return sys.maxsize
-#   return min(lst)
-
 class MinimaxNode:
   def __init__(self, chess_board, max_player: int, min_player: int, is_max):
     self.board = chess_board
@@ -140,7 +122,8 @@ class StudentAgentAb(Agent):
   def __init__(self):
     super(StudentAgentAb, self).__init__()
     self.name = "StudentAgentAb"
-    self.max_depth = 3
+    self.max_depth = 4
+    self.start_depth = 2
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -178,7 +161,10 @@ class StudentAgentAb(Agent):
     # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
     return f1 + f2
 
-  def _minimax(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
+  def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
+    """
+    Recursive alpha-beta pruning call
+    """
     valid_moves = _get_valid_moves(node.board, node.player)
 
     if depth == self.max_depth or len(valid_moves) == 0: #is there a better way to check if we are at a terminal node
@@ -189,7 +175,7 @@ class StudentAgentAb(Agent):
     if isMaxPlayer: #max player case
       maxUtilityScore = -sys.maxsize
       for move in succ:
-        utility = self._minimax(move, depth + 1, alpha, beta, False)
+        utility = self._ab_pruning(move, depth + 1, alpha, beta, False)
         maxUtilityScore = max(maxUtilityScore, utility)
         alpha = max(alpha, utility)
         
@@ -200,7 +186,7 @@ class StudentAgentAb(Agent):
     else: #min player case
       minUtilityScore = sys.maxsize
       for move in succ:
-        utility = self._minimax(move, depth + 1, alpha, beta, True)
+        utility = self._ab_pruning(move, depth + 1, alpha, beta, True)
         minUtilityScore = min(minUtilityScore, utility)
         beta = min(beta, utility)
         if beta <= alpha:
@@ -211,7 +197,10 @@ class StudentAgentAb(Agent):
 
 
   @PROFILER.profile("StudentAgentAb.ab_pruning")
-  def ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
+  def run_ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
+    """
+    Start alpha-beta pruning
+    """
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -228,9 +217,9 @@ class StudentAgentAb(Agent):
     l = list(zip(succ, valid_moves))
     l.sort(
       reverse=True,
-      key=lambda x: self._minimax(x[0], 1, -sys.maxsize, sys.maxsize, True)
+      key=lambda x: self._ab_pruning(x[0], self.start_depth, -sys.maxsize, sys.maxsize, True)
     )
-    return l[0][1]
+    return l[0][1] #return move with highest utility score
 
 
   def step(self, chess_board, player, opponent):
@@ -256,7 +245,7 @@ class StudentAgentAb(Agent):
     start_time = time.time()
 
     # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time
-    next_move = self.ab_pruning(chess_board, player, opponent)
+    next_move = self.run_ab_pruning(chess_board, player, opponent)
 
     time_taken = time.time() - start_time
 
