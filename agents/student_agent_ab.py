@@ -10,7 +10,9 @@ from copy import deepcopy
 from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
 import time
 
+# Lightweight timing profiler for method-level benchmarking
 from agents.simple_profiler import SimpleProfiler
+
 
 PROFILER = SimpleProfiler()
 
@@ -129,19 +131,16 @@ class MinimaxNode:
 
     return succ
 
-@register_agent("student_agent")
-class StudentAgent(Agent):
+@register_agent("student_agent_ab")
+class StudentAgentAb(Agent):
   """
   A class for your implementation. Feel free to use this class to
   add any helper functionalities needed for your agent.
   """
   def __init__(self):
-    super(StudentAgent, self).__init__()
-    self.name = "StudentAgent"
+    super(StudentAgentAb, self).__init__()
+    self.name = "StudentAgentAb"
     self.max_depth = 3
-
-    self.alpha = -sys.maxsize
-    self.beta = sys.maxsize
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -165,12 +164,6 @@ class StudentAgent(Agent):
 
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
-
-  def reset_a_b(self):
-    self.alpha = -sys.maxsize
-    self.beta = sys.maxsize
-
-
   def utility(self, state: MinimaxNode) -> float:
     # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
@@ -185,22 +178,39 @@ class StudentAgent(Agent):
     # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
     return f1 + f2
 
-  def _minimax(self, node, depth) -> float:
+  def _minimax(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    
-    if depth == self.max_depth or len(valid_moves) == 0:
+    if depth == self.max_depth or len(valid_moves) == 0: #is there a better way to check if we are at a terminal node
       return self.utility(node)
 
     succ = node.get_successors(valid_moves)
-    depth_ = depth + 1
+    
+    if isMaxPlayer: #max player case
+      maxUtilityScore = -sys.maxsize
+      for move in succ:
+        utility = self._minimax(move, depth + 1, alpha, beta, False)
+        maxUtilityScore = max(maxUtilityScore, utility)
+        alpha = max(alpha, utility)
+        
+        if beta <= alpha:
+          break
 
-    if node.is_max_node():
-      return max([self._minimax(x, depth_) for x in succ])
-    return min([self._minimax(x, depth_) for x in succ])
+      return maxUtilityScore
+    else: #min player case
+      minUtilityScore = sys.maxsize
+      for move in succ:
+        utility = self._minimax(move, depth + 1, alpha, beta, True)
+        minUtilityScore = min(minUtilityScore, utility)
+        beta = min(beta, utility)
+        if beta <= alpha:
+          break
+      
+      return minUtilityScore
 
 
-  @PROFILER.profile("StudentAgent.minimax")
+
+  @PROFILER.profile("StudentAgentAb.ab_pruning")
   def ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
     valid_moves = _get_valid_moves(chess_board, player)
 
@@ -212,14 +222,13 @@ class StudentAgent(Agent):
     elif n == 1:
       return valid_moves[0]
 
-    self.reset_a_b()
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
 
     l = list(zip(succ, valid_moves))
     l.sort(
       reverse=True,
-      key=lambda x: self._minimax(x[0], 1)
+      key=lambda x: self._minimax(x[0], 1, -sys.maxsize, sys.maxsize, True)
     )
     return l[0][1]
 
@@ -251,7 +260,7 @@ class StudentAgent(Agent):
 
     time_taken = time.time() - start_time
 
-    print("My AI's turn took ", time_taken, "seconds.")
+    print("My AI's AB turn took ", time_taken, "seconds.")
 
     # Print profiler summary for this step
     print(PROFILER.report(top=10))
