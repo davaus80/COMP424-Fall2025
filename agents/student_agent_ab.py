@@ -151,15 +151,26 @@ class StudentAgentAb(Agent):
     # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
     #
     # # f4 to f6: nb of min player discs in mask
-    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    return f1 + f2 + f3 - (f4 + f5 + f6)
+  
+  def evaluate_terminal(self, state: MinimaxNode):
+    f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
+    f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
+    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    #
+    # # f4 to f6: nb of min player discs in mask
+    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
 
     # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
-    return f1 + f2
+    
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
@@ -167,8 +178,12 @@ class StudentAgentAb(Agent):
     """
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    if depth == self.max_depth or node.is_terminal(): #is there a better way to check if we are at a terminal node
+    if node.is_terminal():
+      return self.evaluate_terminal(node)
+
+    if depth >= self.max_depth:
       return self.utility(node)
+
 
     succ = node.get_successors(valid_moves)
     
@@ -214,10 +229,20 @@ class StudentAgentAb(Agent):
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
 
-    l = list(zip(succ, valid_moves))
-    minimax_values = [(self._ab_pruning(x, self.start_depth, -sys.maxsize, sys.maxsize, True), move) for x, move in l]
-    minimax_values.sort(key=lambda x: x[0], reverse=True)
-    return minimax_values[0][1] #return move with highest utility score
+    best_value = -sys.maxsize
+    best_move = None
+
+    # compute alpha beta
+    for child, move in zip(succ, valid_moves):
+        value = self._ab_pruning(child, self.start_depth,
+                                -sys.maxsize, sys.maxsize, False)
+
+        if value > best_value:
+            best_value = value
+            best_move = move
+
+    return best_move
+
 
 
   def step(self, chess_board, player, opponent):
