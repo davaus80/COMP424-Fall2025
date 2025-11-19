@@ -98,7 +98,7 @@ class MinimaxNode:
     is_endgame, _, _ = check_endgame(self.board)
     return is_endgame
 
-  def get_successors(self, valid_moves=None) -> list["MinimaxNode"]:
+  def get_successors(self, valid_moves:list[MoveCoordinates]=None) -> list["MinimaxNode"]:
     """
     Get all children for the current state
     """
@@ -167,7 +167,7 @@ class StudentAgentAb(Agent):
     """
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    if depth == self.max_depth or len(valid_moves) == 0: #is there a better way to check if we are at a terminal node
+    if depth == self.max_depth or node.is_terminal(): #is there a better way to check if we are at a terminal node
       return self.utility(node)
 
     succ = node.get_successors(valid_moves)
@@ -215,9 +215,9 @@ class StudentAgentAb(Agent):
     succ = node.get_successors(valid_moves)
 
     l = list(zip(succ, valid_moves))
-    minimax_values = [self._ab_pruning(x, self.start_depth, -sys.maxsize, sys.maxsize, True) for x in succ]
-    l.sort(minimax_values, reverse=True)
-    return l[0][1] #return move with highest utility score
+    minimax_values = [(self._ab_pruning(x, self.start_depth, -sys.maxsize, sys.maxsize, True), move) for x, move in l]
+    minimax_values.sort(key=lambda x: x[0], reverse=True)
+    return minimax_values[0][1] #return move with highest utility score
 
 
   def step(self, chess_board, player, opponent):
