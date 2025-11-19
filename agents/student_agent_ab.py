@@ -215,10 +215,8 @@ class StudentAgentAb(Agent):
     succ = node.get_successors(valid_moves)
 
     l = list(zip(succ, valid_moves))
-    l.sort(
-      reverse=True,
-      key=lambda x: self._ab_pruning(x[0], self.start_depth, -sys.maxsize, sys.maxsize, True)
-    )
+    minimax_values = [self._ab_pruning(x, self.start_depth, -sys.maxsize, sys.maxsize, True) for x in succ]
+    l.sort(minimax_values, reverse=True)
     return l[0][1] #return move with highest utility score
 
 
