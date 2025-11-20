@@ -224,8 +224,6 @@ class StudentAgentAb(Agent):
     """
     Start alpha-beta pruning
     """
-    self.n_moves += 1
-
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -282,6 +280,7 @@ class StudentAgentAb(Agent):
       next_move = opening_moves[chess_board]
     else:
       next_move = self.run_ab_pruning(chess_board, player, opponent)
+    self.n_moves += 1
 
     time_taken = time.time() - start_time
 
