@@ -1,12 +1,12 @@
 # Student agent: Add your own agent here
 import copy
 from random import betavariate
+from numpy.typing import NDArray
 
 from agents.agent import Agent
 from store import register_agent
 import sys
 import numpy as np
-from copy import deepcopy
 from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
 import time
 
@@ -82,6 +82,10 @@ def print_tree(node, prefix: str = "", is_tail: bool = True):
   # print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} Rat:{node.ratio: .3} ")
   print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} ")
 
+
+opening_moves: dict[NDArray[np.int32], MoveCoordinates] = {}
+
+
 class MinimaxNode:
   def __init__(self, chess_board, max_player: int, min_player: int, is_max):
     self.board = chess_board
@@ -107,7 +111,7 @@ class MinimaxNode:
     succ = []
 
     for move in valid_moves:
-      board_ = copy.deepcopy(self.board)
+      board_ = np.copy(self.board)
       execute_move(board_, move, self.player)
       succ.append(MinimaxNode(board_, self.max_player, self.min_player, not self.is_max))
 
@@ -124,6 +128,8 @@ class StudentAgentAb(Agent):
     self.name = "StudentAgentAb"
     self.max_depth = 4
     self.start_depth = 2
+    self.n_moves = 0  # to keep track of total nb of moves
+    self.N_OPENING = 20  # placeholder value
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -151,13 +157,14 @@ class StudentAgentAb(Agent):
     # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
     #
     # # f4 to f6: nb of min player discs in mask
-    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
-    return f1 + f2 + f3 - (f4 + f5 + f6)
+    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    # return f1 + f2 + f3 - (f4 + f5 + f6)
+    return f1 + f2
   
   def evaluate_terminal(self, state: MinimaxNode):
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
@@ -170,6 +177,7 @@ class StudentAgentAb(Agent):
     f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
 
     # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
+    return f1 + f2
     
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
@@ -216,6 +224,8 @@ class StudentAgentAb(Agent):
     """
     Start alpha-beta pruning
     """
+    self.n_moves += 1
+
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -268,7 +278,10 @@ class StudentAgentAb(Agent):
     start_time = time.time()
 
     # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time
-    next_move = self.run_ab_pruning(chess_board, player, opponent)
+    if self.n_moves < self.N_OPENING:
+      next_move = opening_moves[chess_board]
+    else:
+      next_move = self.run_ab_pruning(chess_board, player, opponent)
 
     time_taken = time.time() - start_time
 

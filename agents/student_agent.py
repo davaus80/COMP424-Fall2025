@@ -98,6 +98,10 @@ def print_tree(node, prefix: str = "", is_tail: bool = True):
 #     return sys.maxsize
 #   return min(lst)
 
+
+
+
+
 class MinimaxNode:
   def __init__(self, chess_board, max_player: int, min_player: int, is_max):
     self.board = chess_board
@@ -114,12 +118,13 @@ class MinimaxNode:
     is_endgame, _, _ = check_endgame(self.board)
     return is_endgame
 
-  def get_successors(self, valid_moves=None) -> list["MinimaxNode"]:
+  def get_successors(self, valid_moves:list[MoveCoordinates]=None) -> list["MinimaxNode"]:
     """
     Get all children for the current state
     """
     if valid_moves is None:
       valid_moves = _get_valid_moves(self.board, self.player)
+    # assert valid_moves is not none
     succ = []
 
     for move in valid_moves:
@@ -138,7 +143,7 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
-    self.max_depth = 3
+    self.max_depth = 4
 
     self.alpha = -sys.maxsize
     self.beta = sys.maxsize

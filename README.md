@@ -82,7 +82,7 @@ Suppose you want to create `second_agent.py`, a second strategy for your student
 ```
 cp agents/student_agent.py agents/second_agent.py
 ```
-2. Change the name in the decorator. Edit `@register_agent("student_agent")` to `@register_agent("second_agent")` and the class name from `StudentAgent` to `SecondAgent`. 
+2. Change the name in the decorator. Edit `@register_agent("student_agent")` to `@register_agent("second_agent")` and the class name from `MCTS_Agent` to `SecondAgent`. 
 3. Import your new agent in the [`__init__.py`](agents/__init__.py) file in [`agents/`](agents/) directory, by adding the line `from .second_agent import SecondAgent`
 4. Now you can run your two agents against each other in the simulator.py by running:
 ```
@@ -98,7 +98,7 @@ Here are a few last minute things to double-check, since your agent must follow 
 
 1. Check that you didn't modify anything outside of `student_agent.py`. You can use `git status` and `git diff` to accomplish this.
 2. Ensure `student_agent.py` does not have any additional imports.
-3. The `StudentAgent` class *must be* decorated with the exact name of `student_agent`. Do not add any comments or change that line at all, as we will be need it to run your agents in the tournament. A common mistake is to copy the contents from a differently named file, e.g.: `best_agent` or similar, without checking.
+3. The `MCTS_Agent` class *must be* decorated with the exact name of `student_agent`. Do not add any comments or change that line at all, as we will be need it to run your agents in the tournament. A common mistake is to copy the contents from a differently named file, e.g.: `best_agent` or similar, without checking.
 4. Check that the time limits are satisfied for all board sizes in the range 6-12, inclusive.
 5. As a final test before submitting, make 100% sure the player you wish to be evaluated on runs correctly with the exact command we'll use in auto-grading ```python simulator.py --player_1 random_agent --player_2 student_agent --autoplay```
 
