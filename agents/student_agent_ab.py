@@ -186,7 +186,7 @@ class StudentAgentAb(Agent):
     """
     Recursive alpha-beta pruning call
     """
-    if time.time() - self.start_time >= 1.95:
+    if time.time() - self.start_time > 1.99:
       return -sys.maxsize
 
     valid_moves = _get_valid_moves(node.board, node.player)
@@ -250,7 +250,7 @@ class StudentAgentAb(Agent):
       value = self._ab_pruning(child, self.start_depth,
                               -sys.maxsize, sys.maxsize, False)
 
-      if time.time() - self.start_time > 1.95:
+      if time.time() - self.start_time > 1.99:
         break
       if value > best_value:
         best_value = value
