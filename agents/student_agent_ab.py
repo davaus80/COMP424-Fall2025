@@ -131,6 +131,7 @@ class StudentAgentAb(Agent):
     self.start_depth = 2
     self.n_moves = 0  # to keep track of total nb of moves
     self.N_OPENING = 0  # placeholder value
+    self.best_move = None  # store best max-player move so far for current turn
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -185,7 +186,11 @@ class StudentAgentAb(Agent):
     """
     Recursive alpha-beta pruning call
     """
+    if time.time() - self.start_time >= 1.95:
+      return -sys.maxsize
+
     valid_moves = _get_valid_moves(node.board, node.player)
+
 
     if node.is_terminal():
       return self.evaluate_terminal(node)
@@ -239,22 +244,18 @@ class StudentAgentAb(Agent):
     succ = node.get_successors(valid_moves)
 
     best_value = -sys.maxsize
-    best_move = valid_moves[0]
 
     # compute alpha beta
     for child, move in zip(succ, valid_moves):
-        value = self._ab_pruning(child, self.start_depth,
-                                -sys.maxsize, sys.maxsize, False)
+      value = self._ab_pruning(child, self.start_depth,
+                              -sys.maxsize, sys.maxsize, False)
 
-        if value > best_value:
-            best_value = value
-            best_move = move
-            if time.time() - self.start_time >= 1.95:
-              return best_move
-
-    return best_move
-
-
+      if time.time() - self.start_time > 1.95:
+        break
+      if value > best_value:
+        best_value = value
+        self.best_move = move
+    return self.best_move
 
   def step(self, chess_board, player, opponent):
     """
