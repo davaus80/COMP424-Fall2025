@@ -125,11 +125,12 @@ class StudentAgentAb(Agent):
   """
   def __init__(self):
     super(StudentAgentAb, self).__init__()
+    self.start_time = 0
     self.name = "StudentAgentAb"
     self.max_depth = 4
     self.start_depth = 2
     self.n_moves = 0  # to keep track of total nb of moves
-    self.N_OPENING = 20  # placeholder value
+    self.N_OPENING = 0  # placeholder value
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -169,12 +170,12 @@ class StudentAgentAb(Agent):
   def evaluate_terminal(self, state: MinimaxNode):
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
     #
     # # f4 to f6: nb of min player discs in mask
-    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
 
     # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
     return f1 + f2
@@ -238,7 +239,7 @@ class StudentAgentAb(Agent):
     succ = node.get_successors(valid_moves)
 
     best_value = -sys.maxsize
-    best_move = None
+    best_move = valid_moves[0]
 
     # compute alpha beta
     for child, move in zip(succ, valid_moves):
@@ -248,6 +249,8 @@ class StudentAgentAb(Agent):
         if value > best_value:
             best_value = value
             best_move = move
+            if time.time() - self.start_time >= 1.95:
+              return best_move
 
     return best_move
 
@@ -273,7 +276,7 @@ class StudentAgentAb(Agent):
     # Some simple code to help you with timing. Consider checking
     # time_taken during your search and breaking with the best answer
     # so far when it nears 2 seconds.
-    start_time = time.time()
+    self.start_time = time.time()
 
     # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time
     if self.n_moves < self.N_OPENING:
@@ -282,7 +285,7 @@ class StudentAgentAb(Agent):
       next_move = self.run_ab_pruning(chess_board, player, opponent)
     self.n_moves += 1
 
-    time_taken = time.time() - start_time
+    time_taken = time.time() - self.start_time
 
     print("My AI's AB turn took ", time_taken, "seconds.")
 
