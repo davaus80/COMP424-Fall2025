@@ -50,14 +50,12 @@ class AlphaBetaAgent(Agent):
     
     valid_moves = get_valid_moves(chess_board, player)
     bestMove = None
-    bestValue = -10000
 
     
     # MINIMAX ALGORITHM
-    d=1
+    d=2
     while time.time() - start_time < time_limit:
       new_order = []
-      i = 0
       for move in valid_moves:
         if (isinstance(move, MoveCoordinates) == False):
           move = move[0]
@@ -68,17 +66,12 @@ class AlphaBetaAgent(Agent):
         
         new_order.append((move, value))
 
-        if (value > bestValue):
-          print("\t\t --- ", i,"/",len(valid_moves))
-          bestValue = value
-          bestMove = move
-        i +=1
-
       new_order.sort(key=lambda sorted_move: sorted_move[1],reverse=True)
       valid_moves = new_order
 
       print(" ---> d: ",d)
       d += 1
+      bestMove = new_order[0][0]
       
 
     
