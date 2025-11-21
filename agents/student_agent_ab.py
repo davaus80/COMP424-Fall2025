@@ -233,17 +233,20 @@ class StudentAgentAb(Agent):
     best_value = -sys.maxsize
     best_move = None
 
+    alpha = -sys.maxsize
+    beta = sys.maxsize
+
     # compute alpha beta
     for child, move in zip(succ, valid_moves):
         value = self._ab_pruning(child, self.start_depth,
-                                -sys.maxsize, sys.maxsize, False)
+                                alpha, beta, False)
 
         if value > best_value:
             best_value = value
             best_move = move
+        alpha = max(alpha, best_value)
 
     return best_move
-
 
 
   def step(self, chess_board, player, opponent):
