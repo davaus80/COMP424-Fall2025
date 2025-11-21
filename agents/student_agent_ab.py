@@ -167,7 +167,7 @@ class StudentAgentAb(Agent):
     # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
     # return f1 + f2 + f3 - (f4 + f5 + f6)
     return f1 + f2
-  
+
   def evaluate_terminal(self, state: MinimaxNode):
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
@@ -180,7 +180,7 @@ class StudentAgentAb(Agent):
 
     # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
     return f1 + f2
-    
+
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
@@ -190,7 +190,6 @@ class StudentAgentAb(Agent):
       return -sys.maxsize
 
     valid_moves = _get_valid_moves(node.board, node.player)
-
 
     if node.is_terminal():
       return self.evaluate_terminal(node)
@@ -245,17 +244,24 @@ class StudentAgentAb(Agent):
 
     best_value = -sys.maxsize
 
+    alpha = -sys.maxsize
+    beta = sys.maxsize
+
     # compute alpha beta
     for child, move in zip(succ, valid_moves):
       value = self._ab_pruning(child, self.start_depth,
-                              -sys.maxsize, sys.maxsize, False)
+                                alpha, beta, False)
 
       if time.time() - self.start_time > 1.99:
         break
       if value > best_value:
         best_value = value
         self.best_move = move
+      alpha = max(alpha, best_value)
+
     return self.best_move
+
+
 
   def step(self, chess_board, player, opponent):
     """
