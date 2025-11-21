@@ -262,7 +262,6 @@ class StudentAgentAb(Agent):
     return self.best_move
 
 
-
   def step(self, chess_board, player, opponent):
     """
     Implement the step function of your agent here.
