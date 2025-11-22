@@ -65,7 +65,7 @@ During autoplay, boards are drawn randomly from `--board_roster_dir` for each it
 
 You need to write one agent and submit it for the class project, but you may develop additional agents during the development process to play against each other, gather data or similar. To write a general agent:
 
-1. Modify **ONLY** the [`student_agent.py`](agents/student_agent.py) file in [`agents/`](agents/) directory, which extends the [`agents.Agent`](agents/agent.py) class.
+1. Modify **ONLY** the [`student_agent.py`](agents/ab2.py) file in [`agents/`](agents/) directory, which extends the [`agents.Agent`](agents/agent.py) class.
 2. Do not add any additional imports.
 3. Implement the `step` function with your game logic. Make extensive use of the functions imported from helpers.py which should be the majority of what you need to interact with the game. Any further logic can be coded directly in your file as global or class variables, functions, etc. **Do not import world.py.**
 4. Test your performance against the random_agent with:

@@ -1,15 +1,16 @@
 # Student agent: Add your own agent here
 import copy
 from random import betavariate
+from numpy.typing import NDArray
 
 from agents.agent import Agent
 from store import register_agent
 import sys
 import numpy as np
-from copy import deepcopy
 from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
 import time
 
+# Lightweight timing profiler for method-level benchmarking
 from agents.simple_profiler import SimpleProfiler
 
 PROFILER = SimpleProfiler()
@@ -82,24 +83,7 @@ def print_tree(node, prefix: str = "", is_tail: bool = True):
   print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} ")
 
 
-# def _max(lst):
-#   """
-#   A max() that handles empty lists of non-negative numbers.
-#   """
-#   if not lst:
-#     return 0
-#   return max(lst)
-#
-# def _min(lst):
-#   """
-#   A min() that handles empty lists.
-#   """
-#   if not lst:
-#     return sys.maxsize
-#   return min(lst)
-
-
-
+opening_moves: dict[NDArray[np.int32], MoveCoordinates] = {}
 
 
 class MinimaxNode:
@@ -124,11 +108,10 @@ class MinimaxNode:
     """
     if valid_moves is None:
       valid_moves = _get_valid_moves(self.board, self.player)
-    # assert valid_moves is not none
     succ = []
 
     for move in valid_moves:
-      board_ = copy.deepcopy(self.board)
+      board_ = np.copy(self.board)
       execute_move(board_, move, self.player)
       succ.append(MinimaxNode(board_, self.max_player, self.min_player, not self.is_max))
 
@@ -142,11 +125,13 @@ class StudentAgent(Agent):
   """
   def __init__(self):
     super(StudentAgent, self).__init__()
+    self.start_time = 0
     self.name = "StudentAgent"
-    self.max_depth = 3
-
-    self.alpha = -sys.maxsize
-    self.beta = sys.maxsize
+    self.max_depth = 4
+    self.start_depth = 2
+    self.n_moves = 0  # to keep track of total nb of moves
+    self.N_OPENING = 0  # placeholder value
+    self.best_move = None  # store best max-player move so far for current turn
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -170,12 +155,6 @@ class StudentAgent(Agent):
 
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
-
-  def reset_a_b(self):
-    self.alpha = -sys.maxsize
-    self.beta = sys.maxsize
-
-
   def utility(self, state: MinimaxNode) -> float:
     # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
@@ -186,27 +165,52 @@ class StudentAgent(Agent):
     # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
     # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
     # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
-
-    # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
+    # return f1 + f2 + f3 - (f4 + f5 + f6)
     return f1 + f2
 
-  def _minimax(self, node, depth) -> float:
+  def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
+    """
+    Recursive alpha-beta pruning call
+    """
+    if node.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
+      return self.utility(node)
+
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    
-    if depth == self.max_depth or len(valid_moves) == 0:
+    if len(valid_moves) == 0:
       return self.utility(node)
 
     succ = node.get_successors(valid_moves)
-    depth_ = depth + 1
+    
+    if isMaxPlayer: #max player case
+      maxUtilityScore = -sys.maxsize
+      for move in succ:
+        utility = self._ab_pruning(move, depth + 1, alpha, beta, False)
+        maxUtilityScore = max(maxUtilityScore, utility)
+        alpha = max(alpha, utility)
+        
+        if beta <= alpha:
+          break
 
-    if node.is_max_node():
-      return max([self._minimax(x, depth_) for x in succ])
-    return min([self._minimax(x, depth_) for x in succ])
+      return maxUtilityScore
+    else: #min player case
+      minUtilityScore = sys.maxsize
+      for move in succ:
+        utility = self._ab_pruning(move, depth + 1, alpha, beta, True)
+        minUtilityScore = min(minUtilityScore, utility)
+        beta = min(beta, utility)
+        if beta <= alpha:
+          break
+      
+      return minUtilityScore
 
 
-  @PROFILER.profile("StudentAgent.minimax")
-  def ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
+
+  @PROFILER.profile("StudentAgent.ab_pruning")
+  def run_ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
+    """
+    Start alpha-beta pruning
+    """
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -217,16 +221,27 @@ class StudentAgent(Agent):
     elif n == 1:
       return valid_moves[0]
 
-    self.reset_a_b()
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
 
-    l = list(zip(succ, valid_moves))
-    l.sort(
-      reverse=True,
-      key=lambda x: self._minimax(x[0], 1)
-    )
-    return l[0][1]
+    best_value = -sys.maxsize
+
+    alpha = -sys.maxsize
+    beta = sys.maxsize
+
+    # compute alpha beta
+    for child, move in zip(succ, valid_moves):
+      value = self._ab_pruning(child, self.start_depth,
+                                alpha, beta, False)
+
+      if time.time() - self.start_time > 1.99:
+        break
+      if value > best_value:
+        best_value = value
+        self.best_move = move
+      alpha = max(alpha, best_value)
+
+    return self.best_move
 
 
   def step(self, chess_board, player, opponent):
@@ -249,14 +264,18 @@ class StudentAgent(Agent):
     # Some simple code to help you with timing. Consider checking
     # time_taken during your search and breaking with the best answer
     # so far when it nears 2 seconds.
-    start_time = time.time()
+    self.start_time = time.time()
 
     # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time
-    next_move = self.ab_pruning(chess_board, player, opponent)
+    if self.n_moves < self.N_OPENING:
+      next_move = opening_moves[chess_board]
+    else:
+      next_move = self.run_ab_pruning(chess_board, player, opponent)
+    self.n_moves += 1
 
-    time_taken = time.time() - start_time
+    time_taken = time.time() - self.start_time
 
-    print("My AI's turn took ", time_taken, "seconds.")
+    print("My AI's AB turn took ", time_taken, "seconds.")
 
     # Print profiler summary for this step
     print(PROFILER.report(top=10))

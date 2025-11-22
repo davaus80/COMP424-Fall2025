@@ -7,7 +7,8 @@ from agents.agent import Agent
 from store import register_agent
 import sys
 import numpy as np
-from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
+from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, \
+  get_two_tile_directions, count_disc_count_change
 import time
 
 # Lightweight timing profiler for method-level benchmarking
@@ -15,57 +16,58 @@ from agents.simple_profiler import SimpleProfiler
 
 PROFILER = SimpleProfiler()
 
-def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
-    """
-    Vectorized get_valid_moves using numpy broadcasting.
-    Returns a list[MoveCoordinates].
-    """
-    board_h, board_w = chess_board.shape
-    # locate source pieces
-    src_rows, src_cols = np.nonzero(chess_board == player)
 
-    if src_rows.size == 0:
-        return []
+def _get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
+  """
+  Vectorized get_valid_moves using numpy broadcasting.
+  Returns a list[MoveCoordinates].
+  """
+  board_h, board_w = chess_board.shape
+  # locate source pieces
+  src_rows, src_cols = np.nonzero(chess_board == player)
 
-    # all offsets to consider
-    offsets = np.array(get_directions() + get_two_tile_directions(), dtype=int)  # (M,2)
-    M = offsets.shape[0]
+  if src_rows.size == 0:
+    return []
 
-    # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
-    src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
-    dests = src + offsets[None, :, :]                         # (N,M,2)
+  # all offsets to consider
+  offsets = np.array(get_directions() + get_two_tile_directions(), dtype=int)  # (M,2)
+  M = offsets.shape[0]
 
-    # flatten dest coordinates and corresponding src repeats
-    dest_rows = dests[..., 0].ravel()
-    dest_cols = dests[..., 1].ravel()
-    src_rows_rep = np.repeat(src_rows, M)
-    src_cols_rep = np.repeat(src_cols, M)
+  # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
+  src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
+  dests = src + offsets[None, :, :]  # (N,M,2)
 
-    # mask: dests inside board
-    in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
-    if not np.any(in_bounds):
-        return []
+  # flatten dest coordinates and corresponding src repeats
+  dest_rows = dests[..., 0].ravel()
+  dest_cols = dests[..., 1].ravel()
+  src_rows_rep = np.repeat(src_rows, M)
+  src_cols_rep = np.repeat(src_cols, M)
 
-    dest_rows_ib = dest_rows[in_bounds].astype(int)
-    dest_cols_ib = dest_cols[in_bounds].astype(int)
-    src_rows_ib = src_rows_rep[in_bounds].astype(int)
-    src_cols_ib = src_cols_rep[in_bounds].astype(int)
+  # mask: dests inside board
+  in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
+  if not np.any(in_bounds):
+    return []
 
-    # mask: dest empty
-    empty_mask = (chess_board[dest_rows_ib, dest_cols_ib] == 0)
-    if not np.any(empty_mask):
-        return []
+  dest_rows_ib = dest_rows[in_bounds].astype(int)
+  dest_cols_ib = dest_cols[in_bounds].astype(int)
+  src_rows_ib = src_rows_rep[in_bounds].astype(int)
+  src_cols_ib = src_cols_rep[in_bounds].astype(int)
 
-    final_src_rows = src_rows_ib[empty_mask]
-    final_src_cols = src_cols_ib[empty_mask]
-    final_dest_rows = dest_rows_ib[empty_mask]
-    final_dest_cols = dest_cols_ib[empty_mask]
+  # mask: dest empty
+  empty_mask = (chess_board[dest_rows_ib, dest_cols_ib] == 0)
+  if not np.any(empty_mask):
+    return []
 
-    # build MoveCoordinates list
-    moves = [MoveCoordinates((int(sr), int(sc)), (int(dr), int(dc)))
-             for sr, sc, dr, dc in zip(final_src_rows, final_src_cols, final_dest_rows, final_dest_cols)]
+  final_src_rows = src_rows_ib[empty_mask]
+  final_src_cols = src_cols_ib[empty_mask]
+  final_dest_rows = dest_rows_ib[empty_mask]
+  final_dest_cols = dest_cols_ib[empty_mask]
 
-    return moves
+  # build MoveCoordinates list
+  moves = [MoveCoordinates((int(sr), int(sc)), (int(dr), int(dc)))
+           for sr, sc, dr, dc in zip(final_src_rows, final_src_cols, final_dest_rows, final_dest_cols)]
+
+  return moves
 
 
 def print_tree(node, prefix: str = "", is_tail: bool = True):
@@ -102,7 +104,7 @@ class MinimaxNode:
     is_endgame, _, _ = check_endgame(self.board)
     return is_endgame
 
-  def get_successors(self, valid_moves:list[MoveCoordinates]=None) -> list["MinimaxNode"]:
+  def get_successors(self, valid_moves: list[MoveCoordinates] = None) -> list["MinimaxNode"]:
     """
     Get all children for the current state
     """
@@ -117,16 +119,18 @@ class MinimaxNode:
 
     return succ
 
-@register_agent("student_agent_ab")
-class StudentAgentAb(Agent):
+
+@register_agent("ab2_agent")
+class StudentAgentAB(Agent):
   """
   A class for your implementation. Feel free to use this class to
   add any helper functionalities needed for your agent.
   """
+
   def __init__(self):
-    super(StudentAgentAb, self).__init__()
+    super(StudentAgentAB, self).__init__()
     self.start_time = 0
-    self.name = "StudentAgentAb"
+    self.name = "AB2Agent"
     self.max_depth = 4
     self.start_depth = 2
     self.n_moves = 0  # to keep track of total nb of moves
@@ -159,41 +163,40 @@ class StudentAgentAb(Agent):
     # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
-    #
-    # # f4 to f6: nb of min player discs in mask
-    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
-    # return f1 + f2 + f3 - (f4 + f5 + f6)
-    return f1 + f2
+    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+
+    # f4 to f6: nb of min player discs in mask
+    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    return f1 + f2 + f3 - (f4 + f5 + f6)
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
     Recursive alpha-beta pruning call
     """
-    if time.time() - self.start_time > 1.99:
-      return -sys.maxsize
+    if node.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
+      return self.utility(node)
 
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    if depth >= self.max_depth or len(valid_moves) == 0 or node.is_terminal():
+    if len(valid_moves) == 0:
       return self.utility(node)
 
     succ = node.get_successors(valid_moves)
-    
-    if isMaxPlayer: #max player case
+
+    if isMaxPlayer:  # max player case
       maxUtilityScore = -sys.maxsize
       for move in succ:
         utility = self._ab_pruning(move, depth + 1, alpha, beta, False)
         maxUtilityScore = max(maxUtilityScore, utility)
         alpha = max(alpha, utility)
-        
+
         if beta <= alpha:
           break
 
       return maxUtilityScore
-    else: #min player case
+    else:  # min player case
       minUtilityScore = sys.maxsize
       for move in succ:
         utility = self._ab_pruning(move, depth + 1, alpha, beta, True)
@@ -201,13 +204,11 @@ class StudentAgentAb(Agent):
         beta = min(beta, utility)
         if beta <= alpha:
           break
-      
+
       return minUtilityScore
 
-
-
-  @PROFILER.profile("StudentAgentAb.ab_pruning")
-  def run_ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
+  @PROFILER.profile("StudentAgent.ab_pruning")
+  def run_ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates | None:
     """
     Start alpha-beta pruning
     """
@@ -232,7 +233,7 @@ class StudentAgentAb(Agent):
     # compute alpha beta
     for child, move in zip(succ, valid_moves):
       value = self._ab_pruning(child, self.start_depth,
-                                alpha, beta, False)
+                               alpha, beta, False)
 
       if time.time() - self.start_time > 1.99:
         break
@@ -242,7 +243,6 @@ class StudentAgentAb(Agent):
       alpha = max(alpha, best_value)
 
     return self.best_move
-
 
   def step(self, chess_board, player, opponent):
     """
@@ -284,26 +284,3 @@ class StudentAgentAb(Agent):
     # Returning a random valid move as an example
     # return random_move(chess_board,player)
     return next_move
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
