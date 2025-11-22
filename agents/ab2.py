@@ -175,6 +175,13 @@ class StudentAgentAB(Agent):
     """
     Recursive alpha-beta pruning call
     """
+    # if time.time() - self.start_time > 1.99:
+    #   return -sys.maxsize
+    #
+    # valid_moves = _get_valid_moves(node.board, node.player)
+    #
+    # if depth >= self.max_depth or len(valid_moves) == 0 or node.is_terminal():
+    #   return self.utility(node)
     if node.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
       return self.utility(node)
 
@@ -275,7 +282,7 @@ class StudentAgentAB(Agent):
 
     time_taken = time.time() - self.start_time
 
-    print("My AI's AB turn took ", time_taken, "seconds.")
+    print("Alpha-beta (test version) agent's turn took ", time_taken, "seconds.")
 
     # Print profiler summary for this step
     print(PROFILER.report(top=10))

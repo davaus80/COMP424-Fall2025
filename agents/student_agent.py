@@ -275,7 +275,7 @@ class StudentAgent(Agent):
 
     time_taken = time.time() - self.start_time
 
-    print("My AI's AB turn took ", time_taken, "seconds.")
+    print("Student agent's turn took ", time_taken, "seconds.")
 
     # Print profiler summary for this step
     print(PROFILER.report(top=10))
