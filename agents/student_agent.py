@@ -159,14 +159,20 @@ class StudentAgent(Agent):
     # f1 to f3: nb of max player discs in mask
     f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
     f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
     #
     # # f4 to f6: nb of min player discs in mask
-    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
     # return f1 + f2 + f3 - (f4 + f5 + f6)  # better W rate against below (0.53)
     return f1 + f2  # 40% faster
+  
+  def start_heuristic(self, state: MinimaxNode) -> float:
+    f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
+    f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
+
+    return f1 + f2
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
@@ -175,7 +181,9 @@ class StudentAgent(Agent):
     if node.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
       return self.utility(node)
 
+
     valid_moves = _get_valid_moves(node.board, node.player)
+    
 
     if len(valid_moves) == 0:
       return self.utility(node)
@@ -211,6 +219,7 @@ class StudentAgent(Agent):
     """
     Start alpha-beta pruning
     """
+    self.best_move = None
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -229,8 +238,12 @@ class StudentAgent(Agent):
     alpha = -sys.maxsize
     beta = sys.maxsize
 
+    sorted_moves = sorted(zip(succ, valid_moves),
+                          key = lambda pair: self.start_heuristic(pair[0]),
+                          reverse=True)
+    
     # compute alpha beta
-    for child, move in zip(succ, valid_moves):
+    for child, move in sorted_moves:
       value = self._ab_pruning(child, self.start_depth,
                                 alpha, beta, False)
 
@@ -240,6 +253,9 @@ class StudentAgent(Agent):
         best_value = value
         self.best_move = move
       alpha = max(alpha, best_value)
+
+      if alpha >= beta:
+       break
 
     return self.best_move
 
@@ -284,26 +300,4 @@ class StudentAgent(Agent):
     # Returning a random valid move as an example
     # return random_move(chess_board,player)
     return next_move
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
