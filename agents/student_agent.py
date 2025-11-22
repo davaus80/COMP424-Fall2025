@@ -219,6 +219,7 @@ class StudentAgent(Agent):
     """
     Start alpha-beta pruning
     """
+    self.best_move = None
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -296,26 +297,4 @@ class StudentAgent(Agent):
     # Returning a random valid move as an example
     # return random_move(chess_board,player)
     return next_move
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
