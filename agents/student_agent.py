@@ -156,23 +156,23 @@ class StudentAgent(Agent):
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
   def utility(self, state: MinimaxNode) -> float:
-    # f1 to f3: nb of max player discs in mask
-    f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
-    f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
-    #
-    # # f4 to f6: nb of min player discs in mask
-    f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
-    # return f1 + f2 + f3 - (f4 + f5 + f6)  # better W rate against below (0.53)
-    return f1 + f2  # 40% faster
-  
-  def start_heuristic(self, state: MinimaxNode) -> float:
-    f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
-    f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
+    # # f1 to f3: nb of max player discs in mask
+    # f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
+    # f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
+    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
+    # #
+    # # # f4 to f6: nb of min player discs in mask
+    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
+    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
+    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
+    # # return f1 + f2 + f3 - (f4 + f5 + f6)  # better W rate against below (0.53)
+    # return f1 + f2  # 40% faster
+    return np.sum(state.board == state.max_player)  # all, faster still
 
-    return f1 + f2
+
+  def start_heuristic(self, state: MinimaxNode) -> float:
+    return np.sum(state.board == state.max_player)  # all
+
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
@@ -181,15 +181,18 @@ class StudentAgent(Agent):
     if node.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
       return self.utility(node)
 
-
     valid_moves = _get_valid_moves(node.board, node.player)
-    
 
     if len(valid_moves) == 0:
       return self.utility(node)
 
     succ = node.get_successors(valid_moves)
-    
+
+    # sorted_moves = sorted(zip(succ, valid_moves),
+    #                       key = lambda t: np.sum(t[0].board == t[0].max_player),
+    #                       reverse=True)
+    # succ_ = [t[0] for t in sorted_moves]
+
     if isMaxPlayer: #max player case
       maxUtilityScore = -sys.maxsize
       for move in succ:
@@ -211,7 +214,6 @@ class StudentAgent(Agent):
           break
       
       return minUtilityScore
-
 
 
   @PROFILER.profile("StudentAgent.ab_pruning")
@@ -238,12 +240,15 @@ class StudentAgent(Agent):
     alpha = -sys.maxsize
     beta = sys.maxsize
 
-    sorted_moves = sorted(zip(succ, valid_moves),
-                          key = lambda pair: self.start_heuristic(pair[0]),
-                          reverse=True)
-    
+    # sorted_moves = sorted(zip(succ, valid_moves),
+    #                       key = lambda t: np.sum(t[0].board == t[0].max_player),
+    #                       reverse=True)
+    # sorted_moves = sorted(zip(succ, valid_moves),
+    #                       key = lambda t: self.start_heuristic(t[0]),
+    #                       reverse=True)
+
     # compute alpha beta
-    for child, move in sorted_moves:
+    for child, move in zip(succ, valid_moves):
       value = self._ab_pruning(child, self.start_depth,
                                 alpha, beta, False)
 
