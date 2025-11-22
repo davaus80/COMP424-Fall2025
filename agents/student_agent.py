@@ -165,8 +165,8 @@ class StudentAgent(Agent):
     # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
     # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
     # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
-    # return f1 + f2 + f3 - (f4 + f5 + f6)
-    return f1 + f2
+    # return f1 + f2 + f3 - (f4 + f5 + f6)  # better W rate against below (0.53)
+    return f1 + f2  # 40% faster
 
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
