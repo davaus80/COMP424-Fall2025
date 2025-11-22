@@ -168,20 +168,6 @@ class StudentAgentAb(Agent):
     # return f1 + f2 + f3 - (f4 + f5 + f6)
     return f1 + f2
 
-  def evaluate_terminal(self, state: MinimaxNode):
-    f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
-    f2 = np.sum(state.board[self.mask2] == state.max_player)  # edges
-    # f3 = np.sum(state.board[self.mask3] == state.max_player)  # corners
-    #
-    # # f4 to f6: nb of min player discs in mask
-    # f4 = np.sum(state.board[self.mask1] == state.min_player)  # non-edges
-    # f5 = np.sum(state.board[self.mask2] == state.min_player)  # edges
-    # f6 = np.sum(state.board[self.mask3] == state.min_player)  # corners
-
-    # return f1 + 2*f2 + 3*f3 + (-.5)*f4 + (-1)*f5 + (-2)*f6
-    return f1 + f2
-
-
   def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
     """
     Recursive alpha-beta pruning call
@@ -191,12 +177,8 @@ class StudentAgentAb(Agent):
 
     valid_moves = _get_valid_moves(node.board, node.player)
 
-    if node.is_terminal():
-      return self.evaluate_terminal(node)
-
-    if depth >= self.max_depth:
+    if depth >= self.max_depth or len(valid_moves) == 0 or node.is_terminal():
       return self.utility(node)
-
 
     succ = node.get_successors(valid_moves)
     

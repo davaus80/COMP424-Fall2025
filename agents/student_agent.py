@@ -143,7 +143,7 @@ class StudentAgent(Agent):
   def __init__(self):
     super(StudentAgent, self).__init__()
     self.name = "StudentAgent"
-    self.max_depth = 4
+    self.max_depth = 3
 
     self.alpha = -sys.maxsize
     self.beta = sys.maxsize
