@@ -254,6 +254,9 @@ class StudentAgent(Agent):
         self.best_move = move
       alpha = max(alpha, best_value)
 
+      if alpha >= beta:
+       break
+
     return self.best_move
 
 
