@@ -153,6 +153,7 @@ class StudentAgent(Agent):
 
     self.random_pool = np.random.randint(0, 48, size=10_000)
 
+
   def utility(self, state: MinimaxNode) -> float:
     # # f1 to f3: nb of max player discs in mask
     # f1 = np.sum(state.board[self.mask1] == state.max_player)  # non-edges
@@ -175,7 +176,8 @@ class StudentAgent(Agent):
   def cutoff(self, s: MinimaxNode, depth: int) -> bool:
     pass
 
-  def _ab_pruning(self, s: MinimaxNode, depth: int, alpha: float, beta: float, isMaxPlayer: bool) -> float:
+
+  def _ab_pruning(self, s: MinimaxNode, alpha: float, beta: float, depth: int) -> float:
     """
     Recursive alpha-beta pruning call
     """
@@ -195,14 +197,14 @@ class StudentAgent(Agent):
     #                         reverse=True)
     #   succ = [t[0] for t in sorted_moves]
 
-    if isMaxPlayer: #max player case
+    if s.is_max_node(): #max player case
       for s_ in succ:
-        alpha = max(alpha, self._ab_pruning(s_, depth + 1, alpha, beta, False))
+        alpha = max(alpha, self._ab_pruning(s_, alpha, beta, depth + 1))
         if alpha >= beta: return beta
       return alpha
     else: #min player case
       for s_ in succ:
-        beta = min(beta, self._ab_pruning(s_, depth + 1, alpha, beta, True))
+        beta = min(beta, self._ab_pruning(s_, alpha, beta, depth + 1))
         if alpha >= beta: return alpha
       return beta
 
@@ -237,7 +239,7 @@ class StudentAgent(Agent):
 
     # compute alpha and get best move for the turn
     for child, move in child_move_pairs:
-      alpha_ = self._ab_pruning(child, self.start_depth, alpha, beta, False)
+      alpha_ = self._ab_pruning(child, alpha, beta, self.start_depth)
 
       if alpha < alpha_:
         alpha = alpha_
