@@ -87,7 +87,7 @@ opening_moves: dict[NDArray[np.int32], MoveCoordinates] = {}
 
 
 class MinimaxNode:
-  def __init__(self, chess_board, max_player: int, min_player: int, is_max):
+  def __init__(self, chess_board, max_player: int, min_player: int, is_max: bool):
     self.board = chess_board
     self.is_max = is_max
     self.player = max_player if is_max else min_player
@@ -102,12 +102,10 @@ class MinimaxNode:
     is_endgame, _, _ = check_endgame(self.board)
     return is_endgame
 
-  def get_successors(self, valid_moves:list[MoveCoordinates]=None) -> list["MinimaxNode"]:
+  def get_successors(self, valid_moves:list[MoveCoordinates]) -> list["MinimaxNode"]:
     """
     Get all children for the current state
     """
-    if valid_moves is None:
-      valid_moves = _get_valid_moves(self.board, self.player)
     succ = []
 
     for move in valid_moves:
@@ -127,11 +125,11 @@ class StudentAgent(Agent):
     super(StudentAgent, self).__init__()
     self.start_time = 0
     self.name = "StudentAgent"
-    self.max_depth = 5
+    self.max_depth = 4
     self.start_depth = 2
     self.n_moves = 0  # to keep track of total nb of moves
     self.N_OPENING = 0  # placeholder value
-    self.best_move = None  # store best max-player move so far for current turn
+    # self.best_move = None  # store best max-player move so far for current turn
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -174,19 +172,22 @@ class StudentAgent(Agent):
     return np.sum(state.board == state.max_player)  # all
 
 
-  def _ab_pruning(self, node: MinimaxNode, depth: int, alpha: int, beta: int, isMaxPlayer: bool) -> float:
+  def cutoff(self, s: MinimaxNode, depth: int) -> bool:
+    pass
+
+  def _ab_pruning(self, s: MinimaxNode, depth: int, alpha: float, beta: float, isMaxPlayer: bool) -> float:
     """
     Recursive alpha-beta pruning call
     """
-    if node.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
-      return self.utility(node)
+    if s.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
+      return self.utility(s)
 
-    valid_moves = _get_valid_moves(node.board, node.player)
+    valid_moves = _get_valid_moves(s.board, s.player)
 
     if len(valid_moves) == 0:
-      return self.utility(node)
+      return self.utility(s)
 
-    succ = node.get_successors(valid_moves)
+    succ = s.get_successors(valid_moves)
 
     # if depth <= 2:
     #   sorted_moves = sorted(zip(succ, valid_moves),
@@ -195,26 +196,15 @@ class StudentAgent(Agent):
     #   succ = [t[0] for t in sorted_moves]
 
     if isMaxPlayer: #max player case
-      maxUtilityScore = -sys.maxsize
-      for move in succ:
-        utility = self._ab_pruning(move, depth + 1, alpha, beta, False)
-        maxUtilityScore = max(maxUtilityScore, utility)
-        alpha = max(alpha, utility)
-        
-        if beta <= alpha:
-          break
-
-      return maxUtilityScore
+      for s_ in succ:
+        alpha = max(alpha, self._ab_pruning(s_, depth + 1, alpha, beta, False))
+        if alpha >= beta: return beta
+      return alpha
     else: #min player case
-      minUtilityScore = sys.maxsize
-      for move in succ:
-        utility = self._ab_pruning(move, depth + 1, alpha, beta, True)
-        minUtilityScore = min(minUtilityScore, utility)
-        beta = min(beta, utility)
-        if beta <= alpha:
-          break
-      
-      return minUtilityScore
+      for s_ in succ:
+        beta = min(beta, self._ab_pruning(s_, depth + 1, alpha, beta, True))
+        if alpha >= beta: return alpha
+      return beta
 
 
   @PROFILER.profile("StudentAgent.run_ab_pruning")
@@ -222,7 +212,6 @@ class StudentAgent(Agent):
     """
     Start alpha-beta pruning
     """
-    self.best_move = None
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
@@ -238,7 +227,7 @@ class StudentAgent(Agent):
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
 
-    best_value = -sys.maxsize
+    best_move = None
 
     alpha = -sys.maxsize
     beta = sys.maxsize
@@ -246,27 +235,18 @@ class StudentAgent(Agent):
     child_move_pairs = list(zip(succ, valid_moves))
     child_move_pairs.sort(key = lambda t: np.sum(t[0].board == t[0].max_player), reverse=True)
 
-    # sorted_moves = sorted(zip(succ, valid_moves),
-    #   key=lambda t: np.sum(t[0].board == t[0].max_player), reverse=True
-    # )
-
-    # compute alpha beta
+    # compute alpha and get best move for the turn
     for child, move in child_move_pairs:
-    # for child, move in sorted_moves:
-      value = self._ab_pruning(child, self.start_depth,
-                                alpha, beta, False)
+      alpha_ = self._ab_pruning(child, self.start_depth, alpha, beta, False)
+
+      if alpha < alpha_:
+        alpha = alpha_
+        best_move = move
 
       if time.time() - self.start_time > 1.99:
         break
-      if value > best_value:
-        best_value = value
-        self.best_move = move
-      alpha = max(alpha, best_value)
 
-      if alpha >= beta:
-        break
-
-    return self.best_move
+    return best_move
 
 
   def step(self, chess_board, player, opponent):
