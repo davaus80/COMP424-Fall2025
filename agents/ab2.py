@@ -222,8 +222,8 @@ class StudentAgentAB(Agent):
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
-    print("==========================================")
-    print(f"# of valid moves: {n}")
+    # print("==========================================")
+    # print(f"# of valid moves: {n}")
     if n == 0:
       return None
     elif n == 1:
@@ -247,11 +247,11 @@ class StudentAgentAB(Agent):
       value = self._ab_pruning(child, self.start_depth,
                                alpha, beta, False)
 
-      if time.time() - self.start_time > 1.99:
-        break
       if value > best_value:
         best_value = value
         self.best_move = move
+      if time.time() - self.start_time > 1.99:
+        break
       alpha = max(alpha, best_value)
 
     return self.best_move

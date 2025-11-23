@@ -237,17 +237,21 @@ class StudentAgent(Agent):
     child_move_pairs = list(zip(succ, valid_moves))
     child_move_pairs.sort(key = lambda t: np.sum(t[0].board == t[0].max_player), reverse=True)
 
-    # compute alpha and get best move for the turn
-    for child, move in child_move_pairs:
-      alpha_ = self._ab_pruning(child, alpha, beta, self.start_depth)
+    # compute alpha and get best move for the turn, with iterative deepening
+    while time.time() - self.start_time < 1.99:
+      for child, move in child_move_pairs:
+        alpha_ = self._ab_pruning(child, alpha, beta, self.start_depth)
 
-      if alpha < alpha_:
-        alpha = alpha_
-        best_move = move
+        if alpha < alpha_:
+          alpha = alpha_
+          best_move = move
 
-      if time.time() - self.start_time > 1.99:
-        break
+        if time.time() - self.start_time > 1.99:
+          break
 
+      self.max_depth += 1
+
+    self.max_depth = 4
     return best_move
 
 
