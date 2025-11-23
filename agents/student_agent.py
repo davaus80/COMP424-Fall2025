@@ -225,7 +225,7 @@ class StudentAgent(Agent):
                 opp_close_by += 1
 
           
-          gap_penalty += opp_close_by 
+          gap_penalty -= opp_close_by 
 
     return gap_penalty
     # if board[dest_row][dest_col] == 0:
