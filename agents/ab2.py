@@ -237,13 +237,13 @@ class StudentAgentAB(Agent):
     alpha = -sys.maxsize
     beta = sys.maxsize
 
-    sorted_moves = sorted(zip(succ, valid_moves),
-                          key = lambda t: np.sum(t[0].board == t[0].max_player),
-                          reverse=True)
+    # sorted_moves = sorted(zip(succ, valid_moves),
+    #                       key = lambda t: np.sum(t[0].board == t[0].max_player),
+    #                       reverse=True)
 
     # compute alpha beta
-    for child, move in sorted_moves:
-    # for child, move in zip(succ, valid_moves):
+    # for child, move in sorted_moves:
+    for child, move in zip(succ, valid_moves):
       value = self._ab_pruning(child, self.start_depth,
                                alpha, beta, False)
 

@@ -127,7 +127,7 @@ class StudentAgent(Agent):
     super(StudentAgent, self).__init__()
     self.start_time = 0
     self.name = "StudentAgent"
-    self.max_depth = 4
+    self.max_depth = 5
     self.start_depth = 2
     self.n_moves = 0  # to keep track of total nb of moves
     self.N_OPENING = 0  # placeholder value
@@ -188,10 +188,11 @@ class StudentAgent(Agent):
 
     succ = node.get_successors(valid_moves)
 
-    # sorted_moves = sorted(zip(succ, valid_moves),
-    #                       key = lambda t: np.sum(t[0].board == t[0].max_player),
-    #                       reverse=True)
-    # succ_ = [t[0] for t in sorted_moves]
+    # if depth <= 2:
+    #   sorted_moves = sorted(zip(succ, valid_moves),
+    #                         key = lambda t: np.sum(t[0].board == t[0].max_player),
+    #                         reverse=True)
+    #   succ = [t[0] for t in sorted_moves]
 
     if isMaxPlayer: #max player case
       maxUtilityScore = -sys.maxsize
@@ -216,7 +217,7 @@ class StudentAgent(Agent):
       return minUtilityScore
 
 
-  @PROFILER.profile("StudentAgent.ab_pruning")
+  @PROFILER.profile("StudentAgent.run_ab_pruning")
   def run_ab_pruning(self, chess_board, player, opponent) -> MoveCoordinates|None:
     """
     Start alpha-beta pruning
@@ -225,12 +226,14 @@ class StudentAgent(Agent):
     valid_moves = _get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
-    print("==========================================")
-    print(f"# of valid moves: {n}")
+    # print("==========================================")
+    # print(f"# of valid moves: {n}")
     if n == 0:
       return None
     elif n == 1:
       return valid_moves[0]
+    # if len(valid_moves) == 0:
+    #   return None
 
     node = MinimaxNode(chess_board, player, opponent, True)
     succ = node.get_successors(valid_moves)
@@ -240,15 +243,16 @@ class StudentAgent(Agent):
     alpha = -sys.maxsize
     beta = sys.maxsize
 
+    child_move_pairs = list(zip(succ, valid_moves))
+    child_move_pairs.sort(key = lambda t: np.sum(t[0].board == t[0].max_player), reverse=True)
+
     # sorted_moves = sorted(zip(succ, valid_moves),
-    #                       key = lambda t: np.sum(t[0].board == t[0].max_player),
-    #                       reverse=True)
-    # sorted_moves = sorted(zip(succ, valid_moves),
-    #                       key = lambda t: self.start_heuristic(t[0]),
-    #                       reverse=True)
+    #   key=lambda t: np.sum(t[0].board == t[0].max_player), reverse=True
+    # )
 
     # compute alpha beta
-    for child, move in zip(succ, valid_moves):
+    for child, move in child_move_pairs:
+    # for child, move in sorted_moves:
       value = self._ab_pruning(child, self.start_depth,
                                 alpha, beta, False)
 
@@ -260,7 +264,7 @@ class StudentAgent(Agent):
       alpha = max(alpha, best_value)
 
       if alpha >= beta:
-       break
+        break
 
     return self.best_move
 
