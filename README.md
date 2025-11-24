@@ -139,6 +139,61 @@ optional arguments:
   --autoplay_runs AUTOPLAY_RUNS
 ```
 
+## GitHub Cloning Instructions
+Because you would likely want to create your own private GitHub repository for this project, but are unable to due to this repository being public, I would suggest for you to follow the instructions below:
+1. Clone the repository doing:
+SSH cloning
+```
+git clone git@github.com:davaus80/COMP424-Fall2025.git
+```
+or HTTPS cloning:
+```
+git clone https://github.com/davaus80/COMP424-Fall2025.git
+```
+2. Create your own private repository on GitHub and add your partners following: https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository and https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository
+3. Add this repository as a remote repository:
+```
+git remote add private <your-github-repo-link>
+```
+4. Push to your remote as:
+```
+git push private main
+```
+And then you should continue using this as you update your changes!
+
+## Maximum Memory Measurements
+Measure using:
+```
+/usr/bin/time -v python simulator.py --player_1 random_agent --player_2 <your-agent> --autoplay
+```
+and then you should see something like:
+```
+Command being timed: "python simulator.py --player_1 random_agent --player_2 random_agent --autoplay"
+        User time (seconds): 8.77
+        System time (seconds): 0.28
+        Percent of CPU this job got: 35%
+        Elapsed (wall clock) time (h:mm:ss or m:ss): 0:25.60
+        Average shared text size (kbytes): 0
+        Average unshared data size (kbytes): 0
+        Average stack size (kbytes): 0
+        Average total size (kbytes): 0
+        Maximum resident set size (kbytes): 61056
+        Average resident set size (kbytes): 0
+        Major (requiring I/O) page faults: 188
+        Minor (reclaiming a frame) page faults: 23247
+        Voluntary context switches: 1682
+        Involuntary context switches: 687
+        Swaps: 0
+        File system inputs: 48512
+        File system outputs: 0
+        Socket messages sent: 0
+        Socket messages received: 0
+        Signals delivered: 0
+        Page size (bytes): 4096
+        Exit status: 0
+```
+where the max resident set size is the most RAM that you have used (in kilobytes).
+
 ## Issues? Bugs? Questions?
 
 Feel free to open an issue in this repository, or contact us in Ed thread.
