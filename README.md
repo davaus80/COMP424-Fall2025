@@ -5,15 +5,32 @@
 ## Setup
 To setup your Python environment, we highly suggest using virtualenv to keep your dependencies in order. Run:
 ```bash
-python3 -m venv venv
+python3.10 -m venv env_name
 ```
 and then:
 ```
-source venv/bin/activate
+source env_name/bin/activate
 ```
 to create and activate your virtual environment. Note: You will need to activate your virtual environment every time you start a new shell. It should appear as:
 ```
-(venv) <username@machine>:~/your/path/to/project$ 
+(env_name) <username@machine>:~/your/path/to/project$ 
+```
+
+Ensure that you have properly installed pip and python in your venv. To check this, you can run:
+```
+which pip
+```
+If you get something like:
+```
+/usr/bin/pip
+```
+rather than :
+```
+/path/to/your/venv/bin/pip
+```
+Then you may need to run:
+```
+python -m pip install --upgrade pip
 ```
 
 To setup the game, clone this repository and install the dependencies. Be sure to have your virtual environment activated.
