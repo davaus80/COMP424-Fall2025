@@ -11,6 +11,9 @@ from helpers import random_move, execute_move, check_endgame, get_valid_moves, M
 import time
 import functools
 
+
+#------------- Debug tools ---------------- #
+
 class SimpleProfiler:
   def __init__(self):
     self.data = {}  # label -> {'time': float, 'count': int}
@@ -44,6 +47,15 @@ class SimpleProfiler:
 
 PROFILER = SimpleProfiler()
 
+
+offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1),
+                    (-1, -1), (-1, 1), (1, -1), (1, 1)] + 
+
+                   [(-2, 0), (2, 0), (0, -2), (0, 2), 
+                    (-2, 1), (2, 1), (1, -2), (1, 2), 
+                    (-2, -1), (2, -1), (-1, -2), (-1, 2),
+                    (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
+
 def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
     """
     Vectorized get_valid_moves using numpy broadcasting.
@@ -57,7 +69,6 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
         return []
 
     # all offsets to consider
-    offsets = np.array(get_directions() + get_two_tile_directions(), dtype=int)  # (M,2)
     M = offsets.shape[0]
 
     # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
@@ -100,7 +111,7 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
   if node.parent:
-    UCT = node.parent.UCB1(node, 1.4)
+    UCT = node.parent.UCB1(node, c=1.4)
     dest = node.action.get_dest()
     source = node.action.get_src()
   else:
@@ -128,10 +139,10 @@ class StudentAgent(Agent):
     self.name = "StudentAgent"
     
     self.last_known_node = None
-    self.random_pool = np.random.randint(0, 48, size=10_000)
+    self.number_moves = 0
 
   @PROFILER.profile("StudentAgent.mcts_search")
-  def mcts_search(self, root_state, player, iter=600):
+  def mcts_search(self, root_state, player, iter=800):
     
     root = None
 
@@ -154,26 +165,78 @@ class StudentAgent(Agent):
       
       
       while not node.is_terminal() and node.is_fully_expanded():
-            # print("First best child")
-            node = node.best_child()
+        # print("First best child")
+        node = node.best_child()
 
       if not node.is_terminal():
         node = node.expand()
 
       # Simulation
-      result = node.limited_rollout()
+      # result = node.limited_rollout()
+      result = node.greedy_rollout()
+      # result = node.super_fast_rollout()
+
 
       # Backpropagation
       node.backpropagate(result)
 
-    # print_tree(root)
-    # print("-"*60)
+    print_tree(root)
+    print("-"*60)
 
     self.last_known_node = root.best_child(c=0)
 
     return self.last_known_node.action
 
+  def greedy_step(self, board, color, opponent):
+        """
+        Choose a move based on a simple Ataxx heuristic.
 
+        Parameters:
+        - board: 2D numpy array representing the game board.
+        - color: Integer representing the agent's color (1 for Player 1/Blue, 2 for Player 2/Brown).
+        - opponent: Integer representing the opponent's color.
+
+        Returns:
+        - MoveCoordinates: The chosen move.
+        """
+        # Get all legal moves for the current player
+        legal_moves = get_valid_moves(board, color)
+
+        if not legal_moves:
+            return None  # No valid moves available, pass turn
+
+        # Apply heuristic: maximize piece difference, corner control, and minimize opponent mobility
+        best_move = None
+        best_score = float('-inf')
+
+        for move in legal_moves:
+            simulated_board = np.copy(board)
+            execute_move(simulated_board, move, color)
+            # evaluate by piece difference, corner bonus, and opponent mobility
+            move_score = self.evaluate_board(simulated_board, color, opponent)
+
+            if move_score > best_score:
+                best_score = move_score
+                best_move = move
+
+        # Return the best move found (or random fallback)
+        return best_move 
+
+
+  def evaluate_board(self, board, color, opponent):
+
+        # piece difference
+        player_count = np.count_nonzero(board == color)
+        opp_count = np.count_nonzero(board == opponent)
+        score_diff = player_count - opp_count
+        # corner control bonus
+        n = board.shape[0]
+        corners = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1)]
+        corner_bonus = sum(1 for (i, j) in corners if board[i, j] == color) * 5
+        # penalize opponent mobility
+        opp_moves = len(get_valid_moves(board, opponent))
+        mobility_penalty = -opp_moves
+        return score_diff + corner_bonus + mobility_penalty
 
   def step(self, chess_board, player, opponent):
     """
@@ -192,16 +255,38 @@ class StudentAgent(Agent):
     Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
     """
 
-    # Some simple code to help you with timing. Consider checking 
-    # time_taken during your search and breaking with the best answer
-    # so far when it nears 2 seconds.
+
     start_time = time.time()
 
-    #next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time 
     next_move = self.mcts_search(chess_board, player)
 
-    # root = MCTSNode(chess_board, player, agent_player_id=player)
-    # time.sleep(1)
+    # arr = chess_board
+    # dest = next_move.get_dest()
+    # r, c = dest
+    # h, w = arr.shape
+
+    # offsets = [(-1,0),(1,0),(0,-1),(0,1)]
+    # offsets += [(-1,-1),(-1,1),(1,-1),(1,1)]
+
+    # nbrs = [(r+dr, c+dc) for dr, dc in offsets if 0 <= r+dr < h and 0 <= c+dc < w]
+    # if not nbrs:
+    #     return np.zeros_like(arr, dtype=bool), []
+
+    # rows, cols = zip(*nbrs)
+    # rows = np.array(rows, dtype=int)
+    # cols = np.array(cols, dtype=int)
+
+    # vals_equal = (arr[rows, cols] == player)
+    # mask = np.zeros_like(arr, dtype=bool)
+    # mask[rows[vals_equal], cols[vals_equal]] = True
+
+    # coords = [(int(rr), int(cc)) for rr, cc in zip(rows[vals_equal], cols[vals_equal])]
+
+    # if len(coords) !=0:
+    #   next_move = MoveCoordinates(coords[0], dest)
+
+    
+
     time_taken = time.time() - start_time
 
     print("My AI's turn took ", time_taken, "seconds.")
@@ -209,9 +294,8 @@ class StudentAgent(Agent):
     # Print profiler summary for this step
     # print(PROFILER.report(top=10))
 
-    # Dummy return (you should replace this with your actual logic)
-    # Returning a random valid move as an example
-    # return random_move(chess_board,player)
+    self.number_moves += 1
+
     return next_move
 
 class MCTSNode:
@@ -249,10 +333,11 @@ class MCTSNode:
     self.untried_action = _get_valid_moves(self.state, self.player)
     self.number_legal_moves = len(self.untried_action)
 
+
+
   @PROFILER.profile("MCTSNode.is_terminal")
   def is_terminal(self) -> bool:
     return self.number_legal_moves == 0
-  
   
   @PROFILER.profile("MCTSNode.is_fully_expanded")
   def is_fully_expanded(self):
@@ -264,7 +349,7 @@ class MCTSNode:
     Expand new child node
     """
 
-    action = self.untried_action.pop(self.rng.integers(0,len(self.untried_action)))
+    action = self.untried_action.pop(self.rng.integers(0,len(self.untried_action))) #randomized to eliminate risk or structure
     new_state = deepcopy(self.state)
 
     execute_move(new_state, action, self.player)
@@ -276,34 +361,29 @@ class MCTSNode:
     return child
 
   @PROFILER.profile("MCTSNode.best_child")
-  def best_child(self, c=2):
+  def best_child(self, c=0.7):
     """
     Return best child using upper confidence tree comparison.  
     """
     return max(self.children, key=lambda child: self.UCB1(child, c))
 
 
-
   @PROFILER.profile("MCTSNode.UCB1")
   def UCB1(self, child, c) -> float:
-    # handle unvisited children to avoid division by zero
-    #parameters
-    b = 0.001 #balance
-    g = 1     #greed
-    # c = 1.4   #exploration
-
+    # keep infinite score for unvisited children so they get explored
     if child.visits == 0:
       return float("inf")
-    
-    # return   (float(child.wins) / float(child.visits)) +\
-    #     c * np.sqrt( np.log(max(1.0, float(self.visits))) / float(child.visits))
+    # standard UCB: value + c * sqrt( log(parent_visits) / child_visits )
+    return (float(child.wins) / float(child.visits)) + c * np.sqrt(np.log(max(1.0, float(self.visits))) / float(child.visits))
 
-    return  float(child.coin_delta)*g + (float(child.wins) / float(child.visits)) +\
-        c * np.sqrt( np.log(max(1.0, float(self.visits))) / float(child.visits))
-  
+  #---------------------- Board eval functions ------------------------#
 
   @PROFILER.profile("MCTSNode.ratio")
   def board_ratio(self) -> float:
+
+    """"
+    Ratio of friendly to oppoent tiles
+    """
 
     friendly_col, _ = np.nonzero(self.state == self.agent_player_id)
     enemy_col, _ = np.nonzero(self.state == (3 - self.agent_player_id))
@@ -333,6 +413,7 @@ class MCTSNode:
 
 
   def mobility_delta(self) -> int:
+    """Returns the change in number of legal moves from parent to child node"""
 
     if self.parent:
       our_score = self.number_legal_moves
@@ -344,10 +425,13 @@ class MCTSNode:
       return 0
 
   
+  #---------------------------- Deafault policies -----------------------#
+
   @PROFILER.profile("MCTSNode.rollout")
   def rollout(self) -> float:
     """
-    Simulate game until completion 
+    Simulate game until completion. Return reward in [0,1] for agent_player_id:
+      1.0 = agent win, 0.5 = draw, 0.0 = agent loss
     """
     curr_state = deepcopy(self.state)
     curr_player = self.player
@@ -361,13 +445,11 @@ class MCTSNode:
       if number_allowed_moves == 0:
         if stuck_flag:
           return 0.5
-        
         curr_player = 3 - curr_player
-        stuck_flag =True  
+        stuck_flag = True
         continue
 
       move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
-
       execute_move(curr_state, move, curr_player)
       is_endgame, p1, p2 = check_endgame(curr_state)
       if is_endgame:
@@ -377,8 +459,8 @@ class MCTSNode:
           winner = 2
         else:
           return 0.5
-        # return +1 for agent win, -1 for agent loss
-        return 1.0 if winner == self.agent_player_id else -1.0
+        # normalize reward to [0,1] from agent perspective
+        return 1.0 if winner == self.agent_player_id else 0.0
 
       curr_player = 3 - curr_player
       stuck_flag = False
@@ -418,23 +500,153 @@ class MCTSNode:
     our_coins = np.count_nonzero(curr_state == our)
     opp_coins = np.count_nonzero(curr_state == opp)
 
-  
+    player_count = np.count_nonzero(curr_state == our)
+    opp_count = np.count_nonzero(curr_state == opp)
+
+    score_diff = player_count - opp_count
     # corner control bonus
-    # n = curr_state.shape[0]
-    # corners = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1)]
-    # our_corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == our) * 5
-    # opp_corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == opp) * 5
-    # penalize opponent mobility
-    # our_moves = len(get_valid_moves(curr_state, our))
-    # opp_moves = len(get_valid_moves(curr_state, opp))
+    n = curr_state.shape[0]
+    corners = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1)]
+    corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == our)*2
 
     our_score = our_coins 
     opp_score = opp_coins 
     
+    # return (score_diff)/10
+
     if our_score > opp_score:
       return 1.0
     elif our_score < opp_score:
-      return -1.0
+      return 0.0
+    else:
+      return 0.5
+    
+  def quick_greed(self, board_ref, place_ref, move, player):
+    place_ref = place_ref*0 + board_ref
+    execute_move(place_ref, move, player)
+
+    opp = 3- player
+    p_score = np.count_nonzero(place_ref == player)
+    o_score = np.count_nonzero(place_ref == opp)
+
+    return p_score - o_score
+
+
+  def greedy_rollout(self) -> float:
+    depth_limit = 5
+
+    save_state = deepcopy(self.state)
+    curr_state = deepcopy(self.state)
+
+
+    curr_player = self.player
+
+    stuck_flag = False
+    n = 0
+
+    while n < depth_limit:
+      allowed_moves = _get_valid_moves(curr_state, curr_player)
+      number_allowed_moves = len(allowed_moves)
+
+      if number_allowed_moves == 0:
+        if stuck_flag:
+          break
+        
+        curr_player = 3 - curr_player
+        stuck_flag = True  
+        continue
+      
+      next_move = max(allowed_moves, key= lambda x: self.quick_greed(curr_state, save_state, x, curr_player)) 
+      execute_move(curr_state, next_move, curr_player)
+
+      curr_player = 3 - curr_player
+      stuck_flag = False
+      n += 1
+
+    our = self.agent_player_id
+    opp = 3 - self.agent_player_id
+
+    our_coins = np.count_nonzero(curr_state == our)
+    opp_coins = np.count_nonzero(curr_state == opp)
+
+    # player_count = np.count_nonzero(curr_state == our)
+    # opp_count = np.count_nonzero(curr_state == opp)
+
+    # score_diff = player_count - opp_count
+    # # corner control bonus
+    # n = curr_state.shape[0]
+    # corners = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1)]
+    # corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == our)*2
+
+    our_score = our_coins 
+    opp_score = opp_coins 
+    
+    # return (score_diff)/10
+
+    if our_score > opp_score:
+      return 1.0
+    elif our_score < opp_score:
+      return 0.0
+    else:
+      return 0.5
+
+  
+
+
+  def super_fast_rollout(self) -> float:
+    depth_limit = 5
+
+    curr_state = deepcopy(self.state)
+
+
+    curr_player = self.player
+
+    stuck_flag = False
+    n = 0
+
+    while n < depth_limit:
+      allowed_moves = _get_valid_moves(curr_state, curr_player)
+      number_allowed_moves = len(allowed_moves)
+
+      if number_allowed_moves == 0:
+        if stuck_flag:
+          break
+        
+        curr_player = 3 - curr_player
+        stuck_flag = True  
+        continue
+      
+      next_move = allowed_moves[0]
+      execute_move(curr_state, next_move, curr_player)
+
+      curr_player = 3 - curr_player
+      stuck_flag = False
+      n += 1
+
+    our = self.agent_player_id
+    opp = 3 - self.agent_player_id
+
+    our_coins = np.count_nonzero(curr_state == our)
+    opp_coins = np.count_nonzero(curr_state == opp)
+
+    # player_count = np.count_nonzero(curr_state == our)
+    # opp_count = np.count_nonzero(curr_state == opp)
+
+    # score_diff = player_count - opp_count
+    # # corner control bonus
+    # n = curr_state.shape[0]
+    # corners = [(0, 0), (0, n - 1), (n - 1, 0), (n - 1, n - 1)]
+    # corner_bonus = sum(1 for (i, j) in corners if curr_state[i, j] == our)*2
+
+    our_score = our_coins 
+    opp_score = opp_coins 
+    
+    # return (score_diff)/10
+
+    if our_score > opp_score:
+      return 1.0
+    elif our_score < opp_score:
+      return 0.0
     else:
       return 0.5
 
