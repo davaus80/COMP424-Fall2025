@@ -56,6 +56,10 @@ offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1),
                     (-2, -1), (2, -1), (-1, -2), (-1, 2),
                     (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
 
+# offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)], dtype = int)
+
+
+@PROFILER.profile("get_valid_moves")
 def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
     """
     Vectorized get_valid_moves using numpy broadcasting.
@@ -107,6 +111,90 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
 
     return moves
 
+@PROFILER.profile("get_valid_moves")
+def new_get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
+    """
+    Vectorized get_valid_moves that folds duplicate one-tile moves (Chebyshev dist == 1)
+    that share the same destination into a single representative. Two-tile jumps are
+    left as-is. Implemented without Python for-loops (uses numpy masks/unique).
+    """
+    board_h, board_w = chess_board.shape
+    src_rows, src_cols = np.nonzero(chess_board == player)
+    if src_rows.size == 0:
+        return []
+
+    # use global offsets (contains 1-tile and 2-tile offsets)
+    M = offsets.shape[0]
+
+    # broadcast: (N,1,2) + (1,M,2) -> (N,M,2)
+    src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
+    dests = src + offsets[None, :, :]                         # (N,M,2)
+
+    # flatten candidates
+    dest_rows = dests[..., 0].ravel()
+    dest_cols = dests[..., 1].ravel()
+    src_rows_rep = np.repeat(src_rows, M)
+    src_cols_rep = np.repeat(src_cols, M)
+    offset_idx = np.tile(np.arange(M), src_rows.size)
+
+    # in-bounds
+    in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
+    if not np.any(in_bounds):
+        return []
+
+    dest_rows = dest_rows[in_bounds].astype(int)
+    dest_cols = dest_cols[in_bounds].astype(int)
+    src_rows_rep = src_rows_rep[in_bounds].astype(int)
+    src_cols_rep = src_cols_rep[in_bounds].astype(int)
+    offset_idx = offset_idx[in_bounds].astype(int)
+
+    # destination must be empty (0) and not obstacle (3)
+    empty_mask = (chess_board[dest_rows, dest_cols] == 0)
+    if not np.any(empty_mask):
+        return []
+
+    final_src_rows = src_rows_rep[empty_mask]
+    final_src_cols = src_cols_rep[empty_mask]
+    final_dest_rows = dest_rows[empty_mask]
+    final_dest_cols = dest_cols[empty_mask]
+
+    final_offset_idx = offset_idx[empty_mask]
+
+    # identify one-tile offsets (Chebyshev distance == 1)
+    is_one_tile_offset = (np.max(np.abs(offsets), axis=1) == 1)
+    is_one_tile = is_one_tile_offset[final_offset_idx]
+
+
+    # canonical id for destination
+    dest_ids = final_dest_rows * board_w + final_dest_cols
+
+    # For one-tile candidates: keep only the first occurrence per destination
+    one_idx = np.nonzero(is_one_tile)[0]
+    if one_idx.size:
+        dest_ids_one = dest_ids[one_idx]
+        _, unique_pos = np.unique(dest_ids_one, return_index=True)  # indices into dest_ids_one
+        one_keep = one_idx[unique_pos]                              # map back to indices into full arrays
+    else:
+        one_keep = np.array([], dtype=int)
+
+    # For non-one-tile (jumps): keep all
+    two_keep = np.nonzero(~is_one_tile)[0]
+
+    # combine kept indices (no loop).
+    if one_keep.size or two_keep.size:
+        keep_idx = np.concatenate([one_keep, two_keep])
+    else:
+        return []
+
+
+    # build MoveCoordinates for kept candidates
+    moves = [
+        MoveCoordinates((int(final_src_rows[i]), int(final_src_cols[i])),
+                        (int(final_dest_rows[i]), int(final_dest_cols[i])))
+        for i in keep_idx
+    ]
+
+    return moves
 
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
@@ -292,7 +380,7 @@ class StudentAgent(Agent):
     print("My AI's turn took ", time_taken, "seconds.")
 
     # Print profiler summary for this step
-    # print(PROFILER.report(top=10))
+    print(PROFILER.report(top=10))
 
     self.number_moves += 1
 
@@ -331,6 +419,10 @@ class MCTSNode:
 
     # Initialize list of legal moves for this node's player
     self.untried_action = _get_valid_moves(self.state, self.player)
+
+
+
+
     self.number_legal_moves = len(self.untried_action)
 
 
