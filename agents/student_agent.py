@@ -201,7 +201,6 @@ def new_get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
     return moves
 
 
-
 @PROFILER.profile("MCTS.newer_get_valid_moves")
 def newer_get_valid_moves(chess_board, player: int):
   """
