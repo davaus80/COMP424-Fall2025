@@ -8,7 +8,6 @@ from helpers import execute_move, check_endgame, MoveCoordinates
 # from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
 
 
-
 #------------- Debug tools ---------------- #
 
 # Lightweight timing profiler for method-level benchmarking
@@ -218,7 +217,6 @@ def newer_get_valid_moves(chess_board, player: int):
   # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
   src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
 
-  # print("src", src)
   dests = src + offsets[None, :, :]                         # (N,M,2)
 
   # flatten dest coordinates and corresponding src repeats
@@ -243,10 +241,12 @@ def newer_get_valid_moves(chess_board, player: int):
   # mask: dest empty
   is_empty_mask = (chess_board[dest_rows, dest_cols] == 0)
 
+
   src_rows = src_rows[is_empty_mask]
   src_cols = src_cols[is_empty_mask]
   dest_rows = dest_rows[is_empty_mask]
   dest_cols = dest_cols[is_empty_mask]
+
 
   two_jump_mask = two_jump_mask[is_empty_mask]
 
@@ -261,14 +261,72 @@ def newer_get_valid_moves(chess_board, player: int):
   dest_rows = dest_rows [two_jump_mask]
   dest_cols = dest_cols[two_jump_mask]
 
-  # return zip(src_rows, src_cols, dest_rows, dest_cols)
-  # moves = []
-  # for i in range(len(src_rows)):
-  #   moves.append(MoveCoordinates((src_rows[i], src_cols[i]), (dest_rows[i], dest_cols[i])))
-  #
-  # return moves
   return [MoveCoordinates((t[0], t[1]), (t[2], t[3])) for t in zip(src_rows, src_cols, dest_rows, dest_cols)]
 
+one_tile_offsets = [(-1, 0), (1, 0), (0, -1), (0, 1), 
+                    (-1, -1), (-1, 1), (1, -1), (1, 1)]
+two_tile_offsets = [(-2, 0), (2, 0), (0, -2), (0, 2),
+                    (-2, 1), (2, 1), (1, -2), (1, 2),
+                    (-2, -1), (2, -1), (-1, -2), (-1, 2),
+                    (-2, -2), (-2, 2), (2, -2), (2, 2)]
+
+NEIGHBORS_1TILE = [[] for _ in range(49)]
+NEIGHBORS_2TILE = [[] for _ in range(49)]
+
+for pos in range(49):
+    r, c = pos // 7, pos % 7
+    for dr, dc in one_tile_offsets:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < 7 and 0 <= nc < 7:
+            NEIGHBORS_1TILE[pos].append((nr * 7 + nc, nr, nc))
+    for dr, dc in two_tile_offsets:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < 7 and 0 <= nc < 7:
+            NEIGHBORS_2TILE[pos].append((nr * 7 + nc, nr, nc))
+
+def board_to_bitmasks(chess_board, player: int) -> tuple[int, int]:
+    """Convert board to player and obstacle bitmasks (bit i = board[i//7, i%7])"""
+    player_mask = 0
+    obstacle_mask = 0
+    for r in range(7):
+        for c in range(7):
+            idx = r * 7 + c
+            if chess_board[r, c] == player:
+                player_mask |= (1 << idx)
+            elif chess_board[r, c] == 3 or chess_board[r, c] == 3- player:  # obstacle
+                obstacle_mask |= (1 << idx)
+    return player_mask, obstacle_mask
+
+@PROFILER.profile("MCTS.super_fast_moves")
+def super_fast_moves(chess_board, player: int) -> list[MoveCoordinates]:
+    
+    player_mask, obstacle_mask = board_to_bitmasks(chess_board, player)
+    occupied_mask = player_mask | obstacle_mask
+    
+    moves = []
+    destinations_one_tile = set()  # Track one-tile destinations to avoid dupes
+    
+    # Iterate source positions
+    for src_bit in range(49):
+        if not (player_mask & (1 << src_bit)):
+            continue
+        
+        src_r, src_c = src_bit // 7, src_bit % 7
+        
+        # One-tile moves (deduplicate by destination)
+        for dst_bit, dst_r, dst_c in NEIGHBORS_1TILE[src_bit]:
+            if not (occupied_mask & (1 << dst_bit)):  # empty
+                dest_key = (dst_r, dst_c)
+                if dest_key not in destinations_one_tile:
+                    destinations_one_tile.add(dest_key)
+                    moves.append(MoveCoordinates((src_r, src_c), (dst_r, dst_c)))
+        
+        # Two-tile moves (keep all)
+        for dst_bit, dst_r, dst_c in NEIGHBORS_2TILE[src_bit]:
+            if not (occupied_mask & (1 << dst_bit)):  # empty
+                moves.append(MoveCoordinates((src_r, src_c), (dst_r, dst_c)))
+    
+    return moves
 
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
@@ -389,8 +447,14 @@ class StudentAgent(Agent):
     if s.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
       return self.utility(s)
 
-    valid_moves = newer_get_valid_moves(s.board, s.player)
+    # valid_moves = newer_get_valid_moves(s.board, s.player)
+    valid_moves = super_fast_moves(s.board, s.player)
+    # valid_moves = super_fast_moves(s.friendly_mask, s.obstacle_mask)
 
+
+
+
+    # assert False
     if len(valid_moves) == 0:
       return self.utility(s)
 
@@ -419,7 +483,7 @@ class StudentAgent(Agent):
     """
     Start alpha-beta pruning
     """
-    valid_moves = newer_get_valid_moves(chess_board, player)
+    valid_moves = super_fast_moves(chess_board, player)
 
     n = len(valid_moves)
     # print("==========================================")
