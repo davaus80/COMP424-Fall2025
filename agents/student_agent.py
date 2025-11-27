@@ -7,6 +7,22 @@ import numpy as np
 from helpers import execute_move, check_endgame, MoveCoordinates
 # from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
 
+import signal
+
+class Timeout(Exception):
+    pass
+
+def handler(signum, frame):
+    raise Timeout()
+
+signal.signal(signal.SIGALRM, handler)
+
+def run_with_timeout(seconds, func, *args, **kwargs):
+    signal.alarm(seconds)
+    try:
+        return func(*args, **kwargs)
+    finally:
+        signal.alarm(0) 
 
 #------------- Debug tools ---------------- #
 
@@ -388,7 +404,7 @@ class StudentAgent(Agent):
     super(StudentAgent, self).__init__()
     self.start_time = 0
     self.name = "StudentAgent"
-    self.max_depth = 4
+    self.max_depth = 5
     self.start_depth = 2
     self.n_moves = 0  # to keep track of total nb of moves
     self.N_OPENING = 0  # placeholder value
@@ -414,7 +430,6 @@ class StudentAgent(Agent):
     mask3[-1][-1] = True
     self.mask3 = mask3  # corners
 
-    self.random_pool = np.random.randint(0, 48, size=10_000)
 
 
   def utility(self, state: MinimaxNode) -> float:
@@ -452,9 +467,6 @@ class StudentAgent(Agent):
     # valid_moves = super_fast_moves(s.friendly_mask, s.obstacle_mask)
 
 
-
-
-    # assert False
     if len(valid_moves) == 0:
       return self.utility(s)
 
@@ -507,19 +519,24 @@ class StudentAgent(Agent):
     child_move_pairs.sort(key = lambda t: np.sum(t[0].board == t[0].max_player), reverse=True)
 
     # compute alpha and get best move for the turn, with iterative deepening
-    while time.time() - self.start_time < 1.99:
-      for child, move in child_move_pairs:
+    try:
+       signal.setitimer(signal.ITIMER_REAL, 1.95)
+       for child, move in child_move_pairs:
         alpha_ = self._ab_pruning(child, alpha, beta, self.start_depth)
 
         if alpha < alpha_:
           alpha = alpha_
           best_move = move
+        
 
-        if time.time() - self.start_time > 1.99:
-          break
+    except Timeout:
+      pass
 
-      break
-      # self.max_depth += 1
+    finally:
+       signal.setitimer(signal.ITIMER_REAL, 0)
+
+
+
 
     # self.max_depth = 4
     return best_move
@@ -548,6 +565,11 @@ class StudentAgent(Agent):
     self.start_time = time.time()
 
     # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time
+    # next_move = self.check_win_1move(chess_board, player, opponent)
+
+    # if next_move:
+    #    return next_move
+    
     if self.n_moves < self.N_OPENING:
       next_move = opening_moves[chess_board]
     else:
