@@ -1,3 +1,7 @@
+- name: "Antoine Parisé"
+  mcgill_id: "261115756"
+  email: "antoine.parise@mail.mcgill.ca"
+
 - name: "Your full name as appears on your transcript"
   mcgill_id: "Your mcgill id"
   email: "email@mail.mcgill.ca"
