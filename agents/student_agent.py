@@ -56,10 +56,11 @@ offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1),
                     (-2, -1), (2, -1), (-1, -2), (-1, 2),
                     (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
 
-# offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)], dtype = int)
+offsets_1 = np.array([(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)], dtype = int)
+offsets_2 = np.array([(-2, 0), (2, 0), (0, -2), (0, 2), (-2, 1), (2, 1), (1, -2), (1, 2), 
+                      (-2, -1), (2, -1), (-1, -2), (-1, 2), (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
 
-
-@PROFILER.profile("get_valid_moves")
+@PROFILER.profile("MCTS.get_valid_moves")
 def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
     """
     Vectorized get_valid_moves using numpy broadcasting.
@@ -111,8 +112,8 @@ def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
 
     return moves
 
-@PROFILER.profile("get_valid_moves")
-def new_get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
+@PROFILER.profile("MCTS.new_get_valid_moves")
+def new_get_valid_moves(chess_board, player: int):
     """
     Vectorized get_valid_moves that folds duplicate one-tile moves (Chebyshev dist == 1)
     that share the same destination into a single representative. Two-tile jumps are
@@ -189,12 +190,80 @@ def new_get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
 
     # build MoveCoordinates for kept candidates
     moves = [
-        MoveCoordinates((int(final_src_rows[i]), int(final_src_cols[i])),
-                        (int(final_dest_rows[i]), int(final_dest_cols[i])))
+        (MoveCoordinates((int(final_src_rows[i]), int(final_src_cols[i])),
+                        (int(final_dest_rows[i]), int(final_dest_cols[i]))))
         for i in keep_idx
     ]
 
     return moves
+
+
+
+@PROFILER.profile("MCTS.newer_get_valid_moves")
+def newer_get_valid_moves(chess_board, player: int):
+  """
+  Vectorized get_valid_moves using numpy broadcasting.
+  Returns a list[MoveCoordinates].
+  """
+  board_h, board_w = chess_board.shape
+  # # locate source pieces
+  src_rows, src_cols = np.nonzero(chess_board == player)
+
+  M = offsets.shape[0]
+  V = offsets_1.shape[0]
+   
+  # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
+  src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
+
+  # print("src", src)
+  dests = src + offsets[None, :, :]                         # (N,M,2)
+
+  # flatten dest coordinates and corresponding src repeats
+  dest_rows = dests[..., 0].ravel()
+  dest_cols = dests[..., 1].ravel()
+  src_rows_rep = np.repeat(src_rows, M)
+  src_cols_rep = np.repeat(src_cols, M)
+
+  two_jump_mask = np.zeros(dest_rows.shape[0], dtype=bool)
+  two_jump_mask[V:] = True
+
+  #mask: move within bounds
+  in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
+  
+  dest_rows = dest_rows[in_bounds]
+  dest_cols = dest_cols[in_bounds]
+  src_rows = src_rows_rep[in_bounds]
+  src_cols = src_cols_rep[in_bounds]
+
+  two_jump_mask = two_jump_mask[in_bounds]
+
+  # mask: dest empty
+  is_empty_mask = (chess_board[dest_rows, dest_cols] == 0)
+
+  src_rows = src_rows[is_empty_mask]
+  src_cols = src_cols[is_empty_mask]
+  dest_rows = dest_rows[is_empty_mask]
+  dest_cols = dest_cols[is_empty_mask]
+
+  two_jump_mask = two_jump_mask[is_empty_mask]
+
+  #fold together identical moves
+  keys = dest_rows * board_w + dest_cols
+  _, unique_idx = np.unique(keys, return_index=True)
+
+
+  two_jump_mask[unique_idx] = True 
+
+  src_rows = src_rows[two_jump_mask]
+  src_cols = src_cols[two_jump_mask]
+  dest_rows = dest_rows [two_jump_mask]
+  dest_cols = dest_cols[two_jump_mask]
+
+
+  return list(zip(src_rows, src_cols, dest_rows, dest_cols))
+
+  
+
 
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
@@ -230,7 +299,7 @@ class StudentAgent(Agent):
     self.number_moves = 0
 
   @PROFILER.profile("StudentAgent.mcts_search")
-  def mcts_search(self, root_state, player, iter=800):
+  def mcts_search(self, root_state, player, iter=200):
     
     root = None
 
@@ -260,15 +329,15 @@ class StudentAgent(Agent):
         node = node.expand()
 
       # Simulation
-      # result = node.limited_rollout()
-      result = node.greedy_rollout()
+      result = node.limited_rollout()
+      # result = node.greedy_rollout()
       # result = node.super_fast_rollout()
 
 
       # Backpropagation
       node.backpropagate(result)
 
-    print_tree(root)
+    # print_tree(root)
     print("-"*60)
 
     self.last_known_node = root.best_child(c=0)
@@ -348,30 +417,8 @@ class StudentAgent(Agent):
 
     next_move = self.mcts_search(chess_board, player)
 
-    # arr = chess_board
-    # dest = next_move.get_dest()
-    # r, c = dest
-    # h, w = arr.shape
 
-    # offsets = [(-1,0),(1,0),(0,-1),(0,1)]
-    # offsets += [(-1,-1),(-1,1),(1,-1),(1,1)]
-
-    # nbrs = [(r+dr, c+dc) for dr, dc in offsets if 0 <= r+dr < h and 0 <= c+dc < w]
-    # if not nbrs:
-    #     return np.zeros_like(arr, dtype=bool), []
-
-    # rows, cols = zip(*nbrs)
-    # rows = np.array(rows, dtype=int)
-    # cols = np.array(cols, dtype=int)
-
-    # vals_equal = (arr[rows, cols] == player)
-    # mask = np.zeros_like(arr, dtype=bool)
-    # mask[rows[vals_equal], cols[vals_equal]] = True
-
-    # coords = [(int(rr), int(cc)) for rr, cc in zip(rows[vals_equal], cols[vals_equal])]
-
-    # if len(coords) !=0:
-    #   next_move = MoveCoordinates(coords[0], dest)
+  
 
     
 
@@ -418,7 +465,7 @@ class MCTSNode:
     self.coin_delta = self.disk_delta()
 
     # Initialize list of legal moves for this node's player
-    self.untried_action = _get_valid_moves(self.state, self.player)
+    self.untried_action = newer_get_valid_moves(self.state, self.player)
 
 
 
@@ -441,7 +488,8 @@ class MCTSNode:
     Expand new child node
     """
 
-    action = self.untried_action.pop(self.rng.integers(0,len(self.untried_action))) #randomized to eliminate risk or structure
+    action__int = self.untried_action.pop(self.rng.integers(0,len(self.untried_action))) #randomized to eliminate risk or structure
+    action = MoveCoordinates((action__int[0], action__int[1]), (action__int[2], action__int[3]))
     new_state = deepcopy(self.state)
 
     execute_move(new_state, action, self.player)
@@ -568,7 +616,7 @@ class MCTSNode:
     n = 0
 
     while n < depth_limit:
-      allowed_moves = _get_valid_moves(curr_state, curr_player)
+      allowed_moves = newer_get_valid_moves(curr_state, curr_player)
       number_allowed_moves = len(allowed_moves)
 
       if number_allowed_moves == 0:
@@ -578,9 +626,11 @@ class MCTSNode:
         curr_player = 3 - curr_player
         stuck_flag = True  
         continue
-
-      move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
-      execute_move(curr_state, move, curr_player)
+      
+      m = allowed_moves[self.rng.integers(0, number_allowed_moves)]
+      next_move = MoveCoordinates((m[0], m[1]), (m[2], m[3]))
+      # move = allowed_moves[self.rng.integers(0, number_allowed_moves)]
+      execute_move(curr_state, next_move, curr_player)
 
       curr_player = 3 - curr_player
       stuck_flag = False
@@ -612,7 +662,7 @@ class MCTSNode:
       return 0.0
     else:
       return 0.5
-    
+  
   def quick_greed(self, board_ref, place_ref, move, player):
     place_ref = place_ref*0 + board_ref
     execute_move(place_ref, move, player)
@@ -623,7 +673,7 @@ class MCTSNode:
 
     return p_score - o_score
 
-
+  @PROFILER.profile("MCTSNode.greedy_rollout")
   def greedy_rollout(self) -> float:
     depth_limit = 5
 
@@ -697,7 +747,7 @@ class MCTSNode:
     n = 0
 
     while n < depth_limit:
-      allowed_moves = _get_valid_moves(curr_state, curr_player)
+      allowed_moves = newer_get_valid_moves(curr_state, curr_player)
       number_allowed_moves = len(allowed_moves)
 
       if number_allowed_moves == 0:
@@ -708,7 +758,8 @@ class MCTSNode:
         stuck_flag = True  
         continue
       
-      next_move = allowed_moves[0]
+      m = allowed_moves[0]
+      next_move = MoveCoordinates((m[0], m[1]), (m[2], m[3]))
       execute_move(curr_state, next_move, curr_player)
 
       curr_player = 3 - curr_player
