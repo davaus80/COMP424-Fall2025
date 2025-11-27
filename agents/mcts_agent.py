@@ -9,6 +9,11 @@ import time
 from helpers import random_move, execute_move, check_endgame, get_valid_moves
 from collections import defaultdict
 
+'''
+A basic MCTS implementation with a choose-best-leaf expansion heuristic.
+This agent beats random agent 100% of the time but loses to greedy corners 100% of the time
+'''
+
 # Get the opposite player given the current one
 PLAYER_SWAP_DICT = {
    1: 2,
@@ -253,7 +258,7 @@ class StudentAgent(Agent):
     Please check the sample implementation in agents/random_agent.py or agents/human_agent.py for more details.
     """
 
-    # Simple depth-2 lookahead MCTS-ish search (very light):
+    # Simple MCTS-ish search:
     start_time = time.time()
 
     valid_moves = get_valid_moves(chess_board, player)
@@ -261,14 +266,8 @@ class StudentAgent(Agent):
       # No valid moves
       return None
 
-    # Initialize the root of the search tree
     tree_root = MCTSNode(chess_board, player, player)
     best_move = tree_root.best_action()
-    # try:
-    #   best_move = tree_root.best_action()
-    # except Exception as e:
-    #   print(f"Exception in rollout_policy: {e}")
-    #   best_move = random_move(chess_board, player)
     
 
     time_taken = time.time() - start_time
