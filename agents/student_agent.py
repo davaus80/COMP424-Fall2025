@@ -4,14 +4,16 @@ from agents.agent import Agent
 from store import register_agent
 import sys
 import numpy as np
-from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
+from helpers import execute_move, check_endgame, MoveCoordinates
+# from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
+
+
+
+#------------- Debug tools ---------------- #
 
 # Lightweight timing profiler for method-level benchmarking
 import time
 import functools
-
-
-#------------- Debug tools ---------------- #
 
 class SimpleProfiler:
   def __init__(self):
@@ -252,7 +254,6 @@ def newer_get_valid_moves(chess_board, player: int):
   keys = dest_rows * board_w + dest_cols
   _, unique_idx = np.unique(keys, return_index=True)
 
-
   two_jump_mask[unique_idx] = True
 
   src_rows = src_rows[two_jump_mask]
@@ -260,10 +261,13 @@ def newer_get_valid_moves(chess_board, player: int):
   dest_rows = dest_rows [two_jump_mask]
   dest_cols = dest_cols[two_jump_mask]
 
-
-  return list(zip(src_rows, src_cols, dest_rows, dest_cols))
-
-
+  # return zip(src_rows, src_cols, dest_rows, dest_cols)
+  # moves = []
+  # for i in range(len(src_rows)):
+  #   moves.append(MoveCoordinates((src_rows[i], src_cols[i]), (dest_rows[i], dest_cols[i])))
+  #
+  # return moves
+  return [MoveCoordinates((t[0], t[1]), (t[2], t[3])) for t in zip(src_rows, src_cols, dest_rows, dest_cols)]
 
 
 def print_tree(node, prefix: str = "", is_tail: bool = True):
@@ -303,7 +307,7 @@ class MinimaxNode:
     is_endgame, _, _ = check_endgame(self.board)
     return is_endgame
 
-  def get_successors(self, valid_moves:list[MoveCoordinates]) -> list["MinimaxNode"]:
+  def get_successors(self, valid_moves:list[tuple[int, int, int, int]]) -> list["MinimaxNode"]:
     """
     Get all children for the current state
     """
@@ -385,7 +389,7 @@ class StudentAgent(Agent):
     if s.is_terminal() or depth >= self.max_depth or time.time() - self.start_time > 1.99:
       return self.utility(s)
 
-    valid_moves = _get_valid_moves(s.board, s.player)
+    valid_moves = newer_get_valid_moves(s.board, s.player)
 
     if len(valid_moves) == 0:
       return self.utility(s)
@@ -415,7 +419,7 @@ class StudentAgent(Agent):
     """
     Start alpha-beta pruning
     """
-    valid_moves = _get_valid_moves(chess_board, player)
+    valid_moves = newer_get_valid_moves(chess_board, player)
 
     n = len(valid_moves)
     # print("==========================================")
@@ -450,9 +454,10 @@ class StudentAgent(Agent):
         if time.time() - self.start_time > 1.99:
           break
 
-      self.max_depth += 1
+      break
+      # self.max_depth += 1
 
-    self.max_depth = 4
+    # self.max_depth = 4
     return best_move
 
 
