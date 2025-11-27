@@ -4,8 +4,9 @@ from agents.agent import Agent
 from store import register_agent
 import sys
 import numpy as np
+
 from helpers import execute_move, check_endgame, MoveCoordinates
-# from helpers import random_move, execute_move, check_endgame, get_valid_moves, MoveCoordinates, get_directions, get_two_tile_directions, count_disc_count_change
+
 
 import signal
 
@@ -63,222 +64,7 @@ class SimpleProfiler:
 
 PROFILER = SimpleProfiler()
 
-
-offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1),
-                    (-1, -1), (-1, 1), (1, -1), (1, 1)] +
-
-                   [(-2, 0), (2, 0), (0, -2), (0, 2),
-                    (-2, 1), (2, 1), (1, -2), (1, 2),
-                    (-2, -1), (2, -1), (-1, -2), (-1, 2),
-                    (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
-
-offsets_1 = np.array([(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)], dtype = int)
-offsets_2 = np.array([(-2, 0), (2, 0), (0, -2), (0, 2), (-2, 1), (2, 1), (1, -2), (1, 2),
-                      (-2, -1), (2, -1), (-1, -2), (-1, 2), (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
-
-
-@PROFILER.profile("get_valid_moves")
-def _get_valid_moves(chess_board,player:int) -> list[MoveCoordinates]:
-    """
-    Vectorized get_valid_moves using numpy broadcasting.
-    Returns a list[MoveCoordinates].
-    """
-    board_h, board_w = chess_board.shape
-    # locate source pieces
-    src_rows, src_cols = np.nonzero(chess_board == player)
-
-    if src_rows.size == 0:
-        return []
-
-    # all offsets to consider
-    M = offsets.shape[0]
-
-    # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
-    src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
-    dests = src + offsets[None, :, :]                         # (N,M,2)
-
-    # flatten dest coordinates and corresponding src repeats
-    dest_rows = dests[..., 0].ravel()
-    dest_cols = dests[..., 1].ravel()
-    src_rows_rep = np.repeat(src_rows, M)
-    src_cols_rep = np.repeat(src_cols, M)
-
-    # mask: dests inside board
-    in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
-    if not np.any(in_bounds):
-        return []
-
-    dest_rows_ib = dest_rows[in_bounds].astype(int)
-    dest_cols_ib = dest_cols[in_bounds].astype(int)
-    src_rows_ib = src_rows_rep[in_bounds].astype(int)
-    src_cols_ib = src_cols_rep[in_bounds].astype(int)
-
-    # mask: dest empty
-    empty_mask = (chess_board[dest_rows_ib, dest_cols_ib] == 0)
-    if not np.any(empty_mask):
-        return []
-
-    final_src_rows = src_rows_ib[empty_mask]
-    final_src_cols = src_cols_ib[empty_mask]
-    final_dest_rows = dest_rows_ib[empty_mask]
-    final_dest_cols = dest_cols_ib[empty_mask]
-
-    # build MoveCoordinates list
-    moves = [MoveCoordinates((int(sr), int(sc)), (int(dr), int(dc)))
-             for sr, sc, dr, dc in zip(final_src_rows, final_src_cols, final_dest_rows, final_dest_cols)]
-
-    return moves
-
-
-@PROFILER.profile("get_valid_moves")
-def new_get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
-    """
-    Vectorized get_valid_moves that folds duplicate one-tile moves (Chebyshev dist == 1)
-    that share the same destination into a single representative. Two-tile jumps are
-    left as-is. Implemented without Python for-loops (uses numpy masks/unique).
-    """
-    board_h, board_w = chess_board.shape
-    src_rows, src_cols = np.nonzero(chess_board == player)
-    if src_rows.size == 0:
-        return []
-
-    # use global offsets (contains 1-tile and 2-tile offsets)
-    M = offsets.shape[0]
-
-    # broadcast: (N,1,2) + (1,M,2) -> (N,M,2)
-    src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
-    dests = src + offsets[None, :, :]                         # (N,M,2)
-
-    # flatten candidates
-    dest_rows = dests[..., 0].ravel()
-    dest_cols = dests[..., 1].ravel()
-    src_rows_rep = np.repeat(src_rows, M)
-    src_cols_rep = np.repeat(src_cols, M)
-    offset_idx = np.tile(np.arange(M), src_rows.size)
-
-    # in-bounds
-    in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
-    if not np.any(in_bounds):
-        return []
-
-    dest_rows = dest_rows[in_bounds].astype(int)
-    dest_cols = dest_cols[in_bounds].astype(int)
-    src_rows_rep = src_rows_rep[in_bounds].astype(int)
-    src_cols_rep = src_cols_rep[in_bounds].astype(int)
-    offset_idx = offset_idx[in_bounds].astype(int)
-
-    # destination must be empty (0) and not obstacle (3)
-    empty_mask = (chess_board[dest_rows, dest_cols] == 0)
-    if not np.any(empty_mask):
-        return []
-
-    final_src_rows = src_rows_rep[empty_mask]
-    final_src_cols = src_cols_rep[empty_mask]
-    final_dest_rows = dest_rows[empty_mask]
-    final_dest_cols = dest_cols[empty_mask]
-
-    final_offset_idx = offset_idx[empty_mask]
-
-    # identify one-tile offsets (Chebyshev distance == 1)
-    is_one_tile_offset = (np.max(np.abs(offsets), axis=1) == 1)
-    is_one_tile = is_one_tile_offset[final_offset_idx]
-
-
-    # canonical id for destination
-    dest_ids = final_dest_rows * board_w + final_dest_cols
-
-    # For one-tile candidates: keep only the first occurrence per destination
-    one_idx = np.nonzero(is_one_tile)[0]
-    if one_idx.size:
-        dest_ids_one = dest_ids[one_idx]
-        _, unique_pos = np.unique(dest_ids_one, return_index=True)  # indices into dest_ids_one
-        one_keep = one_idx[unique_pos]                              # map back to indices into full arrays
-    else:
-        one_keep = np.array([], dtype=int)
-
-    # For non-one-tile (jumps): keep all
-    two_keep = np.nonzero(~is_one_tile)[0]
-
-    # combine kept indices (no loop).
-    if one_keep.size or two_keep.size:
-        keep_idx = np.concatenate([one_keep, two_keep])
-    else:
-        return []
-
-
-    # build MoveCoordinates for kept candidates
-    moves = [
-        MoveCoordinates((int(final_src_rows[i]), int(final_src_cols[i])),
-                        (int(final_dest_rows[i]), int(final_dest_cols[i])))
-        for i in keep_idx
-    ]
-
-    return moves
-
-
-
-@PROFILER.profile("MCTS.newer_get_valid_moves")
-def newer_get_valid_moves(chess_board, player: int):
-  """
-  Vectorized get_valid_moves using numpy broadcasting.
-  Returns a list[MoveCoordinates].
-  """
-  board_h, board_w = chess_board.shape
-  # # locate source pieces
-  src_rows, src_cols = np.nonzero(chess_board == player)
-
-  M = offsets.shape[0]
-  V = offsets_1.shape[0]
-
-  # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
-  src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
-
-  dests = src + offsets[None, :, :]                         # (N,M,2)
-
-  # flatten dest coordinates and corresponding src repeats
-  dest_rows = dests[..., 0].ravel()
-  dest_cols = dests[..., 1].ravel()
-  src_rows_rep = np.repeat(src_rows, M)
-  src_cols_rep = np.repeat(src_cols, M)
-
-  two_jump_mask = np.zeros(dest_rows.shape[0], dtype=bool)
-  two_jump_mask[V:] = True
-
-  #mask: move within bounds
-  in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
-
-  dest_rows = dest_rows[in_bounds]
-  dest_cols = dest_cols[in_bounds]
-  src_rows = src_rows_rep[in_bounds]
-  src_cols = src_cols_rep[in_bounds]
-
-  two_jump_mask = two_jump_mask[in_bounds]
-
-  # mask: dest empty
-  is_empty_mask = (chess_board[dest_rows, dest_cols] == 0)
-
-
-  src_rows = src_rows[is_empty_mask]
-  src_cols = src_cols[is_empty_mask]
-  dest_rows = dest_rows[is_empty_mask]
-  dest_cols = dest_cols[is_empty_mask]
-
-
-  two_jump_mask = two_jump_mask[is_empty_mask]
-
-  #fold together identical moves
-  keys = dest_rows * board_w + dest_cols
-  _, unique_idx = np.unique(keys, return_index=True)
-
-  two_jump_mask[unique_idx] = True
-
-  src_rows = src_rows[two_jump_mask]
-  src_cols = src_cols[two_jump_mask]
-  dest_rows = dest_rows [two_jump_mask]
-  dest_cols = dest_cols[two_jump_mask]
-
-  return [MoveCoordinates((t[0], t[1]), (t[2], t[3])) for t in zip(src_rows, src_cols, dest_rows, dest_cols)]
-
+#bitmask generator
 one_tile_offsets = [(-1, 0), (1, 0), (0, -1), (0, 1), 
                     (-1, -1), (-1, 1), (1, -1), (1, 1)]
 two_tile_offsets = [(-2, 0), (2, 0), (0, -2), (0, 2),
@@ -343,23 +129,6 @@ def super_fast_moves(chess_board, player: int) -> list[MoveCoordinates]:
                 moves.append(MoveCoordinates((src_r, src_c), (dst_r, dst_c)))
     
     return moves
-
-def print_tree(node, prefix: str = "", is_tail: bool = True):
-  """Print tree sideways with branches going upward."""
-  if node.parent:
-    UCT = node.parent.UCB1(node, c=1.4)
-    dest = node.action.get_dest()
-    source = node.action.get_src()
-  else:
-    UCT = 0.0
-    dest = []
-    source = []
-
-  if node.children:
-    for i, child in enumerate(node.children[:-1]):
-      print_tree(child, prefix + ("│   " if not is_tail else "    "), False)
-    print_tree(node.children[-1], prefix + ("│   " if not is_tail else "    "), True)
-  print(prefix + ("└── " if is_tail else "┌── ") + f"[{node.minmax}] {node.wins}/{node.visits} UCT:{UCT: .3} {source}{dest}")
   
 
 opening_moves: dict[NDArray[np.int32], MoveCoordinates] = {}
@@ -374,6 +143,7 @@ class MinimaxNode:
     self.max_player = max_player
     self.min_player = min_player
 
+    
   def is_max_node(self):
     return self.is_max
 
@@ -409,6 +179,8 @@ class StudentAgent(Agent):
     self.n_moves = 0  # to keep track of total nb of moves
     self.N_OPENING = 0  # placeholder value
     # self.best_move = None  # store best max-player move so far for current turn
+
+    self.verbose = 1
 
     # masks for heuristic calculations
     mask1 = np.ones((7, 7), dtype=bool)
@@ -451,7 +223,7 @@ class StudentAgent(Agent):
     return np.sum(state.board == state.max_player)  # all
 
 
-  def cutoff(self, s: MinimaxNode, depth: int) -> bool:
+  def cutoff(self, s: MinimaxNode, depth: int):
     pass
 
 
@@ -520,7 +292,8 @@ class StudentAgent(Agent):
 
     # compute alpha and get best move for the turn, with iterative deepening
     try:
-       signal.setitimer(signal.ITIMER_REAL, 1.95)
+       signal.setitimer(signal.ITIMER_REAL, 1.99)
+
        for child, move in child_move_pairs:
         alpha_ = self._ab_pruning(child, alpha, beta, self.start_depth)
 
@@ -534,8 +307,6 @@ class StudentAgent(Agent):
 
     finally:
        signal.setitimer(signal.ITIMER_REAL, 0)
-
-
 
 
     # self.max_depth = 4
@@ -560,15 +331,8 @@ class StudentAgent(Agent):
     """
 
     # Some simple code to help you with timing. Consider checking
-    # time_taken during your search and breaking with the best answer
-    # so far when it nears 2 seconds.
+
     self.start_time = time.time()
-
-    # next_move = get_valid_moves(chess_board, player)[0] #this litterally wins against a random agent 82% of the time
-    # next_move = self.check_win_1move(chess_board, player, opponent)
-
-    # if next_move:
-    #    return next_move
     
     if self.n_moves < self.N_OPENING:
       next_move = opening_moves[chess_board]
@@ -580,10 +344,8 @@ class StudentAgent(Agent):
 
     print("Student agent's turn took ", time_taken, "seconds.")
 
-    # Print profiler summary for this step
-    print(PROFILER.report(top=10))
+    # Print profiler
+    if self.verbose:
+      print(PROFILER.report(top=10))
 
-    # Dummy return (you should replace this with your actual logic)
-    # Returning a random valid move as an example
-    # return random_move(chess_board,player)
     return next_move
