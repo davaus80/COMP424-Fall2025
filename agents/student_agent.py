@@ -55,7 +55,9 @@ offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1),
                     (-2, -1), (2, -1), (-1, -2), (-1, 2),
                     (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
 
-# offsets = np.array([(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)], dtype = int)
+offsets_1 = np.array([(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1)], dtype = int)
+offsets_2 = np.array([(-2, 0), (2, 0), (0, -2), (0, 2), (-2, 1), (2, 1), (1, -2), (1, 2),
+                      (-2, -1), (2, -1), (-1, -2), (-1, 2), (-2, -2), (-2, 2), (2, -2), (2, 2)], dtype = int)
 
 
 @PROFILER.profile("get_valid_moves")
@@ -195,6 +197,74 @@ def new_get_valid_moves(chess_board, player: int) -> list[MoveCoordinates]:
     ]
 
     return moves
+
+
+
+@PROFILER.profile("MCTS.newer_get_valid_moves")
+def newer_get_valid_moves(chess_board, player: int):
+  """
+  Vectorized get_valid_moves using numpy broadcasting.
+  Returns a list[MoveCoordinates].
+  """
+  board_h, board_w = chess_board.shape
+  # # locate source pieces
+  src_rows, src_cols = np.nonzero(chess_board == player)
+
+  M = offsets.shape[0]
+  V = offsets_1.shape[0]
+
+  # create (N,1,2) src array and broadcast with (1,M,2) offsets -> (N,M,2) dests
+  src = np.stack((src_rows, src_cols), axis=1)[:, None, :]  # (N,1,2)
+
+  # print("src", src)
+  dests = src + offsets[None, :, :]                         # (N,M,2)
+
+  # flatten dest coordinates and corresponding src repeats
+  dest_rows = dests[..., 0].ravel()
+  dest_cols = dests[..., 1].ravel()
+  src_rows_rep = np.repeat(src_rows, M)
+  src_cols_rep = np.repeat(src_cols, M)
+
+  two_jump_mask = np.zeros(dest_rows.shape[0], dtype=bool)
+  two_jump_mask[V:] = True
+
+  #mask: move within bounds
+  in_bounds = (dest_rows >= 0) & (dest_rows < board_h) & (dest_cols >= 0) & (dest_cols < board_w)
+
+  dest_rows = dest_rows[in_bounds]
+  dest_cols = dest_cols[in_bounds]
+  src_rows = src_rows_rep[in_bounds]
+  src_cols = src_cols_rep[in_bounds]
+
+  two_jump_mask = two_jump_mask[in_bounds]
+
+  # mask: dest empty
+  is_empty_mask = (chess_board[dest_rows, dest_cols] == 0)
+
+  src_rows = src_rows[is_empty_mask]
+  src_cols = src_cols[is_empty_mask]
+  dest_rows = dest_rows[is_empty_mask]
+  dest_cols = dest_cols[is_empty_mask]
+
+  two_jump_mask = two_jump_mask[is_empty_mask]
+
+  #fold together identical moves
+  keys = dest_rows * board_w + dest_cols
+  _, unique_idx = np.unique(keys, return_index=True)
+
+
+  two_jump_mask[unique_idx] = True
+
+  src_rows = src_rows[two_jump_mask]
+  src_cols = src_cols[two_jump_mask]
+  dest_rows = dest_rows [two_jump_mask]
+  dest_cols = dest_cols[two_jump_mask]
+
+
+  return list(zip(src_rows, src_cols, dest_rows, dest_cols))
+
+
+
 
 def print_tree(node, prefix: str = "", is_tail: bool = True):
   """Print tree sideways with branches going upward."""
