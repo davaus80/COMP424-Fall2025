@@ -307,7 +307,7 @@ class MinimaxNode:
     is_endgame, _, _ = check_endgame(self.board)
     return is_endgame
 
-  def get_successors(self, valid_moves:list[tuple[int, int, int, int]]) -> list["MinimaxNode"]:
+  def get_successors(self, valid_moves:list[MoveCoordinates]) -> list["MinimaxNode"]:
     """
     Get all children for the current state
     """
